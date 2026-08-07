@@ -2,6 +2,9 @@
 
 For Nik, Michael and Brian. You don't need to read any code to own a scenario.
 
+**New here?** Start with [getting-started.md](getting-started.md) — GitHub account, cloning the
+repo, and the prompts to use with Claude Code. Come back to this once you have it running.
+
 ## Use your own menu
 
 Each scenario has its own submenu, titled with its name and owner:
@@ -224,6 +227,7 @@ code. Read that first and the change will be easier anyway.
 
 ## Reference
 
+- `docs/getting-started.md` — setup, and prompts for Claude Code
 - `CLAUDE.md` — the full spec, including every API constraint we've measured and why
 - `docs/mcp-validation.md` — how to test a seeded scenario against the MCP
 - `INSTALL.md` — how the workbook and script are set up

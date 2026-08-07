@@ -80,6 +80,7 @@ CLAUDE.md                  the working spec — decisions, API constraints, inci
 INSTALL.md                 paste order and first run
 README.md                  this file
 docs/
+  getting-started.md       GitHub account, clone, first prompts — for a new scenario owner
   working-together.md      how the three owners share one workbook (start here if you are Nik or Brian)
   mcp-validation.md        how to test a seeded scenario against the MCP
   original-brief.md        superseded first draft, provenance only
