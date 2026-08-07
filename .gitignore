@@ -1,0 +1,8 @@
+# Local credentials — never commit. Used only by tools/probe-api.js for diagnostics.
+apps-script/local/
+.env
+*.env
+
+# Editor / OS noise
+.DS_Store
+node_modules/
