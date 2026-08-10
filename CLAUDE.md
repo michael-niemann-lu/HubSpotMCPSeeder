@@ -1049,6 +1049,24 @@ summary verbatim can report zero rows; `due_date_passed` returns the strings `"y
 `"no_string"` rather than booleans; course names carry a ` v.1` version suffix; dates come back
 `MM/DD/YYYY`.
 
+## Reporting quirk that produced a false all-clear — 2026-08-10
+
+**`is_preview: true` on the MCP progress report silently caps the result set, and the SUMMARY
+BLOCK IS COMPUTED ON THE SAMPLE, NOT THE POPULATION.** A report on course `3038648` returned
+`enrolment_total: 5` for a course holding **240** enrollments. The number is not labelled as
+partial, carries no truncation flag, and looks exactly like a real total.
+
+That answer was used to conclude ACME's auto-enrolment rule had been turned off, and to tell Michael
+it was safe to seed. It had not been turned off. 74 more strays were created.
+
+**Rule: never read a total from a preview.** Any count that a decision rests on must be run with
+explicit `pagination` and no `is_preview`. Preview is for eyeballing shape, nothing else.
+
+This is the same family as LearnUpon quirk 12 (`num_enrolled` reads 0 for a course with 127
+enrollments) and quirk 3 (an ignored filter returns everything): **this stack's reporting layer
+returns confident, well-formed, wrong numbers**, and the only defence is to check totals two ways
+before acting on them.
+
 ## Sheets quirks
 
 **Checkbox validation materialises `FALSE` into every blank cell in its range.** `is_admin` and
