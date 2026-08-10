@@ -561,3 +561,150 @@ function removeStrayEnrollments() {
     (notes.length ? notes.slice(0, 8).map(n => '  - ' + n).join('\n') + '\n\n' : '') +
     'Run Verify — the percentages should now match the plan.');
 }
+
+
+// ---------------------------------------------------------------------------
+// Repair Courses
+// ---------------------------------------------------------------------------
+
+/**
+ * Gives content to manifest courses that are empty drafts, and publishes them.
+ *
+ * Exists because a wrong module id leaves exactly that: the course record is created and recorded,
+ * so the phase skips it on every later run, but it has no content and cannot be enrolled on. The
+ * manifest is right, the portal is wrong, and no other action reaches the gap.
+ *
+ * A draft is detected the way quirk 13 forces: GET /courses returns PUBLISHED courses only, so a
+ * reference_code the manifest knows about and that endpoint does not is a draft.
+ *
+ * Creates nothing and deletes nothing. Only ever adds a module to a course we already made.
+ */
+function repairCourses() {
+  const scope = activeUseCase();
+  const mine = manifestRows().filter(r =>
+    String(r.platform || 'learnupon') === 'learnupon' &&
+    String(r.object_type) === 'course' && inScope_(r.use_case, scope));
+
+  if (!mine.length) {
+    uiAlert('Repair Courses — ' + scopeLabel(), 'No courses in _Manifest for this scenario.');
+    return;
+  }
+
+  luResetCounters();
+
+  // Published courses, by reference code. Anything of ours missing from this list is a draft.
+  const published = {};
+  try {
+    firstArrayIn_(luGet_('courses').body, ['courses']).forEach(c => {
+      const ref = String(pick_(c, ['reference_code']) || '').trim();
+      if (ref) published[ref] = String(pick_(c, ['id']));
+    });
+  } catch (e) {
+    uiAlert('Repair Courses — failed', 'Could not list courses: ' + String(e.message).slice(0, 300));
+    return;
+  }
+
+  const valid = {};
+  try {
+    firstArrayIn_(luGet_('modules').body, ['modules']).forEach(m => {
+      valid[String(pick_(m, ['id']))] = String(pick_(m, ['component_type', 'type']) || '?');
+    });
+  } catch (e) { /* handled below */ }
+
+  const plan = scopedPlan();
+  const moduleByRef = {};
+  plan.learnupon.courses.forEach(c => { moduleByRef[c.reference_code] = c.source_module_id; });
+  const fallback = String(getSetting('default_source_module_id', '')).trim();
+
+  const broken = mine.filter(r => !published[String(r.extra || '').trim()]);
+  if (!broken.length) {
+    uiAlert('Repair Courses — ' + scopeLabel(),
+      'All ' + mine.length + ' course(s) in the manifest are published and have content.\n\n' +
+      'Nothing to repair.');
+    return;
+  }
+
+  // Resolve a usable module for each before touching anything.
+  const work = [], blocked = [];
+  broken.forEach(r => {
+    const ref = String(r.extra || '').trim();
+    const own = String(moduleByRef[ref] || '').trim();
+    let moduleId = (own && valid[own]) ? own : ((fallback && valid[fallback]) ? fallback : null);
+    if (moduleId && valid[moduleId] === 'ilt session') moduleId = null;
+    if (!moduleId) {
+      blocked.push(ref + ': no valid module (scenario says ' + (own || 'blank') +
+        ', Settings.default_source_module_id is ' + (fallback || 'blank') + ')');
+      return;
+    }
+    work.push({ id: String(r.external_id), ref: ref, moduleId: moduleId });
+  });
+
+  if (blocked.length) {
+    uiAlert('Repair Courses — blocked',
+      'Nothing was changed. ' + blocked.length + ' course(s) have no usable module in ' +
+      environmentLabel() + ':\n\n' + blocked.map(b => '  - ' + b).join('\n') +
+      '\n\nUse Setup -> Find a Module, then set Settings.default_source_module_id.');
+    return;
+  }
+
+  const ui = SpreadsheetApp.getUi();
+  const ok = ui.alert('Repair Courses',
+    'PORTAL:   ' + environmentLabel() + '\n' +
+    'SCENARIO: ' + scopeLabel() + '\n\n' +
+    work.length + ' course(s) exist but are empty drafts. Nothing can be enrolled on them.\n\n' +
+    work.map(w => '  ' + w.ref + '  <- module ' + w.moduleId).join('\n') +
+    '\n\nThis adds content and publishes them. No course is created or deleted.',
+    ui.ButtonSet.OK_CANCEL);
+  if (ok !== ui.Button.OK) return;
+
+  return withLock(function () {
+    const runId = newRunId();
+    const notes = [];
+    let fixed = 0, failed = 0;
+
+    work.forEach(w => {
+      try {
+        const add = luPost_('courses/add_module',
+          { course_id: Number(w.id), module_id: Number(w.moduleId) }, { raw: true });
+        if (add.code >= 400) {
+          throw new Error('add_module ' + add.code + ' ' + String(add.raw || '').slice(0, 120));
+        }
+        const pub = luPost_('courses/publish', { course_id: Number(w.id) }, { raw: true });
+        if (pub.code >= 400) {
+          throw new Error('publish ' + pub.code + ' ' + String(pub.raw || '').slice(0, 120));
+        }
+        fixed++;
+      } catch (e) {
+        failed++;
+        notes.push(w.ref + ': ' + String(e.message).slice(0, 160));
+      }
+    });
+
+    // Read back. A 2xx from this API is not proof, and a course that is still a draft would
+    // otherwise send us straight back into the same wall of enrollment failures.
+    const after = {};
+    try {
+      firstArrayIn_(luGet_('courses').body, ['courses']).forEach(c => {
+        const ref = String(pick_(c, ['reference_code']) || '').trim();
+        if (ref) after[ref] = true;
+      });
+    } catch (e) { /* reported below as unverified */ }
+    const stillDraft = work.filter(w => !after[w.ref]);
+
+    logAction({ run_id: runId, action: 'Repair Courses', phase: 'courses', platform: 'learnupon',
+      object_type: 'course', intended: work.length, succeeded: fixed, failed: failed,
+      notes: notes.slice(0, 3).join(' | ') });
+
+    uiAlert('Repair Courses — done',
+      'Portal:   ' + environmentLabel() + '\n' +
+      'Scenario: ' + scopeLabel() + '\n\n' +
+      'Repaired: ' + fixed + '\n' +
+      'Failed:   ' + failed + '\n\n' +
+      (stillDraft.length
+        ? 'STILL DRAFT after the run (verified by reading back):\n' +
+          stillDraft.map(w => '  - ' + w.ref).join('\n') +
+          '\n\nDo not seed enrollments until this is empty.'
+        : 'All repaired courses are published and carry content — verified by read-back.') +
+      (notes.length ? '\n\nProblems:\n' + notes.map(n => '  - ' + n).join('\n') : ''));
+  });
+}

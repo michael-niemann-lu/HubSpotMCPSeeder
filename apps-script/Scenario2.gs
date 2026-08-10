@@ -27,8 +27,18 @@
  */
 
 const UC2_CSM_OWNER = 'michael.niemann@learnupon.com';
-/** Module donor for created courses. SCORM — never an "ilt session", which fails every enrollment. */
-const UC2_SOURCE_MODULE = 7788730;
+/**
+ * Module donor for created courses.
+ *
+ * MODULE IDS ARE PORTAL-SPECIFIC. 7788730 exists in lucidchartsandbox and NOT in ACME, which is why
+ * the first ACME seed produced three empty draft courses and 188 enrollment failures reading only
+ * "internal error". This is the ACME id, the same one uc1's courses use there.
+ *
+ * The portable answer is Settings.default_source_module_id — when this id is not valid in whatever
+ * portal you are pointed at, the seeder falls back to that and tells you it did. Never an
+ * "ilt session": live sessions carry their own seat count and every enrollment fails.
+ */
+const UC2_SOURCE_MODULE = 7921958;
 
 function scenario2Meta() {
   return {

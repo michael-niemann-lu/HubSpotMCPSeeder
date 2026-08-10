@@ -612,6 +612,46 @@ cannot reveal a missing record. `verifyHubSpot()` checks four things a green see
 the ticket landed, it is in the stage the scenario asked for, it is associated to a company at all
 (so "which account" is answerable), and its date is still inside its declared window.
 
+### Incident — one wrong module id, 188 failed enrollments, 2026-08-10
+
+The first uc2 seed into ACME reported `Seed: courses — Created: 3, Failed: 0` with six lines of
+`add_module returned 400` / `publish returned 400` listed underneath as "Problems". The next phase
+failed all 188 enrollments with `400 internal error, please try again`, which names nothing.
+
+**Cause, in one line: module ids are portal-specific.** `Scenario1.gs` and `Scenario2.gs` both
+hardcoded `7788730`, which exists in `lucidchartsandbox` and not in ACME. uc1's ACME courses use
+**`7921958`** — someone had typed the right id into the sheet by hand before the scenario-file
+restructure, and Load then overwrote it with the sandbox value.
+
+The chain, each link invisible from the next:
+
+```
+add_module 400   ->  course has no content
+publish    400   ->  course stays a DRAFT, invisible to GET /courses (quirk 13)
+enrollment 400   ->  "internal error" — spike 4: a course with no modules cannot be enrolled on
+```
+
+**The defect that made it expensive** was not the wrong id — that is an ordinary data mistake. It
+was that `phaseCourses_` counted a course as *created* when `add_module` and `publish` had both
+failed. An empty draft is not a course; nothing can ever be enrolled on it. Reporting three
+successes and burying the cause in a "Problems" list sent the next phase into a wall with no path
+back to the real fault. **Third time this exact shape has shipped**, after the completions incident
+and the stray-enrollment incident.
+
+**Fixes:**
+- `add_module` or `publish` failing now **throws**, so the course is counted failed and the response
+  body is in the message.
+- The phase **validates every module id against the portal before creating anything**, one call, and
+  refuses with the id, the portal name and what to do. It also refuses an `ilt session` module,
+  which spike 4 showed fails every enrollment with "course capacity reached".
+- **`Settings.default_source_module_id`** is the portable answer: when a scenario file's id is not
+  valid in the current portal, the seeder falls back to this and says so in the preview. One
+  scenario file can then seed both portals.
+- **`Developer -> Repair Courses`** fixes courses already in this state. Nothing else could: the
+  manifest has them, so every phase skips them, while the portal holds an unusable draft. It detects
+  drafts through quirk 13 (`GET /courses` returns published only), adds content, publishes, and
+  **verifies by reading back** — a course still draft afterwards is named explicitly.
+
 ### Incident — the seeder leaked 18 tickets into a shared portal, 2026-08-10
 
 Building the HubSpot side left **18 duplicate tickets and 2 duplicate deals** in portal 23399533:

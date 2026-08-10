@@ -59,7 +59,8 @@ const SETTINGS_DEFAULTS = [
   ['demo_source_field_label', 'demo_source', 'Label of the free-text custom user field used for tagging.'],
   ['group_title_prefix', 'Customer: ', 'Prefix for LearnUpon group titles. Reads naturally in a demo.'],
   ['course_ref_prefix', 'MCPDEMO', 'Prefix for course reference_code, our invisible course tag.'],
-  ['course_owner_id', '', 'LearnUpon user id that owns created courses. Required by POST /courses.']
+  ['course_owner_id', '', 'LearnUpon user id that owns created courses. Required by POST /courses.'],
+  ['default_source_module_id', '', 'Module attached to created courses when a scenario file\'s source_module_id does not exist in THIS portal. Module ids are portal-specific, so this is what lets one scenario file seed both the sandbox and ACME. Find one with Setup -> Find a Module.']
 ];
 
 /**

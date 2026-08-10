@@ -140,7 +140,8 @@ MCP Demo Seeder
 │    Reset HubSpot — archive this scenario's tickets and deals  <- destructive
 ├─ Scenario 2 — … (Michael) ▸ same
 ├─ Scenario 3 — … (Brian) ▸ same
-└─ Developer ▸ Unit Tests │ Column Contract │ Resolved Dates │ API Probe │ Repair Manifest │ Remove Stray Enrollments
+└─ Developer ▸ Unit Tests │ Column Contract │ Resolved Dates │ API Probe
+             Repair Manifest │ Repair Courses │ Remove Stray Enrollments
 ```
 
 Every action is scoped to its scenario, so one owner's Reset cannot reach another's data.
@@ -159,6 +160,8 @@ Measured, not assumed. Full detail in `CLAUDE.md`.
   `{"remove_from_history": "true"}` as a **string**. The boolean is rejected.
 - **A 2xx does not mean the write happened.** This API returns `200 {"success":"ok"}` for several
   no-ops. Every write is verified by reading it back.
+- **Module ids are portal-specific.** A scenario file written against the sandbox will not seed
+  ACME. Set `Settings.default_source_module_id` so any invalid id falls back to a real one.
 - **Users are never deleted** by this toolkit. Everything else can be removed. On the HubSpot side
   companies and contacts are equally persistent — Reset archives tickets and deals only.
 - **A name the portal does not recognise stops the phase.** Ticket stages and deal pipelines are

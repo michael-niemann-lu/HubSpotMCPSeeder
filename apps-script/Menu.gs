@@ -51,6 +51,7 @@ function onOpen() {
     .addSeparator()
     .addItem('API Probe (GET only)', 'apiProbe')
     .addItem('Repair Manifest', 'repairManifest')
+    .addItem('Repair Courses (fix empty drafts)', 'repairCourses')
     .addItem('Remove Stray Enrollments', 'removeStrayEnrollments'));
 
   menu.addToUi();

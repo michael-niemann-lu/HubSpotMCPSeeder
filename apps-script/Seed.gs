@@ -35,6 +35,16 @@ function runPhase_(title, fn) {
   const plan = scopedPlan();
   const work = fn.build(plan, manifestIndex());
 
+  if (work.blockedCourses && work.blockedCourses.length) {
+    uiAlert(title + ' — blocked',
+      'Nothing was created. These courses cannot be given content:\n\n' +
+      work.blockedCourses.map(b => '  - ' + b).join('\n') +
+      '\n\nModule ids are specific to a portal. Use Setup -> Find a Module against a course in ' +
+      environmentLabel() + ', then either put the id in the Courses tab (source_module_id) or set ' +
+      'Settings.default_source_module_id so every scenario falls back to it.');
+    return;
+  }
+
   // A phase whose prerequisites are missing must refuse, not quietly do less than asked.
   if (work.blocked && work.blocked.length) {
     uiAlert(title + ' — blocked',
@@ -79,8 +89,7 @@ function runPhase_(title, fn) {
         ? 'Problems:\n' + result.notes.slice(0, 10).map(n => '  - ' + n).join('\n') +
           (result.notes.length > 10 ? '\n  ... and ' + (result.notes.length - 10) + ' more' : '')
         : 'No errors.') +
-      '\n\nEvery created record is on _Manifest. See _Log for the run summary.' +
-      '\n\nRun Verify next — it reconciles the portal against the plan.');
+      '\n\nEvery created record is on _Manifest. See _Log for the run summary.');
   });
 }
 
@@ -294,9 +303,50 @@ const phaseCourses_ = {
       if (index[c.natural_key]) { skipped++; return; }
       items.push({ kind: 'course', rec: c });
     });
+
+    // Module ids are PORTAL-SPECIFIC. A scenario file written against the sandbox carries ids that
+    // do not exist in ACME, and add_module fails for every course. Checking up front costs one
+    // call and turns a confusing cascade into a sentence.
+    const blocked = [];
+    if (items.length) {
+      const valid = {};
+      try {
+        firstArrayIn_(luGet_('modules').body, ['modules']).forEach(m => {
+          valid[String(pick_(m, ['id']))] = String(pick_(m, ['component_type', 'type']) || '?');
+        });
+      } catch (e) {
+        blocked.push('could not list modules in this portal: ' + String(e.message).slice(0, 120));
+      }
+
+      const fallback = String(getSetting('default_source_module_id', '')).trim();
+      if (Object.keys(valid).length) {
+        items.forEach(i => {
+          const own = String(i.rec.source_module_id || '').trim();
+          if (own && valid[own]) { i.moduleId = own; return; }
+          if (fallback && valid[fallback]) {
+            i.moduleId = fallback;
+            i.usedFallback = own || '(blank)';
+            return;
+          }
+          blocked.push(i.rec.title + ': module ' + (own || '(blank)') + ' does not exist in ' +
+            environmentLabel() + (fallback ? ', and Settings.default_source_module_id (' +
+            fallback + ') does not either' : ', and Settings.default_source_module_id is blank'));
+        });
+        // An "ilt session" module carries its own seat capacity and fails every enrollment.
+        items.forEach(i => {
+          if (i.moduleId && valid[i.moduleId] === 'ilt session') {
+            blocked.push(i.rec.title + ': module ' + i.moduleId + ' is an "ilt session". Live ' +
+              'sessions have their own seat count and every enrollment fails with "course ' +
+              'capacity reached". Pick a different module.');
+          }
+        });
+      }
+    }
+
     return {
-      items: items, skipped: skipped, noun: 'courses',
-      preview: items.map(i => i.rec.title + '  [' + i.rec.reference_code + ']')
+      items: items, skipped: skipped, noun: 'courses', blockedCourses: blocked,
+      preview: items.map(i => i.rec.title + '  [' + i.rec.reference_code + ']' +
+        (i.usedFallback ? '  (module ' + i.moduleId + ' from Settings)' : ''))
     };
   },
 
@@ -332,16 +382,26 @@ const phaseCourses_ = {
         manifestAppend(runId, [{ object_type: 'course', class: 'persistent', external_id: id,
           natural_key: c.natural_key, use_case: c.use_case, extra: c.reference_code }]);
 
-        // Content, then publish. A course with no modules cannot be enrolled on at all.
-        const moduleId = adopted ? 0 : Number(c.source_module_id);
-        if (moduleId) {
+        // Content, then publish. A course with no modules cannot be enrolled on at all, so a
+        // failure here is NOT cosmetic — it leaves an empty draft that every later enrollment
+        // rejects with "internal error". Reporting it as created is how one wrong module id
+        // turned into 188 failed enrollments with no clue where the fault was.
+        if (!adopted) {
+          const moduleId = Number(item.moduleId || c.source_module_id);
           const add = luPost_('courses/add_module',
             { course_id: Number(id), module_id: moduleId }, { raw: true });
-          if (add.code >= 400) notes.push(c.title + ': add_module returned ' + add.code);
-        }
-        if (!adopted) {
+          if (add.code >= 400) {
+            throw new Error('add_module(' + moduleId + ') returned ' + add.code + ' ' +
+              String(add.raw || '').slice(0, 140) + ' — the course exists but is an empty draft ' +
+              'and nothing can be enrolled on it. Run Developer -> Repair Courses after fixing ' +
+              'the module id.');
+          }
           const pub = luPost_('courses/publish', { course_id: Number(id) }, { raw: true });
-          if (pub.code >= 400) notes.push(c.title + ': publish returned ' + pub.code);
+          if (pub.code >= 400) {
+            throw new Error('publish returned ' + pub.code + ' ' +
+              String(pub.raw || '').slice(0, 140) + ' — the course is still a draft. Draft courses ' +
+              'are invisible to GET /courses and cannot be enrolled on.');
+          }
         }
 
         succeeded++;
