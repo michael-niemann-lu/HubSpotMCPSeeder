@@ -23,7 +23,8 @@ const { execFileSync } = require('child_process');
 
 const SRC = path.join(__dirname, '..', 'apps-script');
 const FILES = ['Schema.gs', 'Random.gs', 'Dates.gs', 'Expand.gs', 'Validate.gs', 'Scenario1.gs',
-  'Manifest.gs', 'LearnUpon.gs', 'Seed.gs', 'Reset.gs', 'Refresh.gs'];
+  'Manifest.gs', 'LearnUpon.gs', 'Seed.gs', 'Reset.gs', 'Refresh.gs',
+  'HubSpot.gs', 'HubSpotSeed.gs'];
 const ENV_PATH = path.join(SRC, 'local', '.env');
 const STATE_PATH = path.join(SRC, 'local', 'seed-local-state.json');
 
@@ -53,7 +54,8 @@ function curlFetch(url, params) {
   const cfg = [
     'url = "' + url + '"',
     'request = "' + (params.method || 'get').toUpperCase() + '"',
-    'header = "Authorization: ' + AUTH + '"',
+    'header = "Authorization: ' +
+      ((params.headers && params.headers.Authorization) || AUTH) + '"',
     'header = "Accept: application/json"',
     'silent',
     'show-error',
@@ -91,7 +93,14 @@ function currentEnvironment() { return 'test'; }
 function environmentLabel() { return 'TEST (' + __h.subdomain + '.learnupon.com)'; }
 function learnUponBase() { return 'https://' + __h.subdomain + '.learnupon.com/api/v1/'; }
 function learnUponAuthHeader() { return __h.auth; }
-function getCreds() { return { environment: 'test', subdomain: __h.subdomain }; }
+function getCreds() { return { environment: 'test', subdomain: __h.subdomain, hubspotToken: __h.hsToken }; }
+function activeUseCase() { return __h.settings().active_use_case || 'uc1'; }
+function inScope_(uc, scope) { return scope === 'all' || String(uc).trim() === scope; }
+function scopeLabel() { return activeUseCase(); }
+function withScope_(uc, fn) { return fn(); }
+function scenarioFor(uc) { return (__h.tabRows('Scenarios') || [])
+  .filter(function (r) { return String(r.use_case).trim() === String(uc).trim(); })[0] || null; }
+function scenarioExpectedFor() { return null; }
 function tabRows(name) { return __h.tabRows(name); }
 function replaceTabBody(name, rows) { __h.replaceTabBody(name, rows); }
 function appendTabRows(name, rows) { __h.appendTabRows(name, rows); }
@@ -107,7 +116,11 @@ var Utilities = {
   sleep: function (ms) { var end = Date.now() + ms; while (Date.now() < end) {} },
   base64Encode: function (s) { return __h.b64(s); },
   getUuid: function () { return 'uuid-' + (__h.runSeq++); },
-  formatDate: function (d) { return d.toISOString().slice(0, 19).replace(/[-:T]/g, ''); }
+  formatDate: function (d, tz, fmt) {
+    const iso = new Date(d).toISOString();
+    if (fmt === 'yyyy-MM-dd') return iso.slice(0, 10);
+    return iso.slice(0, 19).replace(/[-:T]/g, '');
+  }
 };
 var UrlFetchApp = { fetch: function (url, params) { return __h.fetch(url, params); } };
 var LockService = { getScriptLock: function () {
@@ -178,6 +191,7 @@ let settings = {};
 const host = {
   subdomain: env.LEARNUPON_PORTAL_SUBDOMAIN,
   auth: AUTH,
+  hsToken: env.HUBSPOT_TOKEN,
   runSeq: 1,
   typed: 'RESET ENROLLMENTS',
   settings: () => settings,
@@ -227,7 +241,79 @@ evalIn('SETTINGS_DEFAULTS').forEach(([k, v]) => { settings[k] = v; });
 settings.course_owner_id = '32088202';
 settings.t_anchor_mode = 'today';
 
-tinyWorkbook(evalIn, settings);
+const MODE = process.argv[2] || 'seed';
+if (MODE === 'hubspot' || MODE === 'hubspot-reset') tinyHubSpotWorkbook(evalIn, settings);
+else tinyWorkbook(evalIn, settings);
+
+/**
+ * A miniature scenario 2: one company, three named filers, two ticket categories (one with a
+ * course, one a deliberate gap) across both comparison windows, and one deal.
+ *
+ * Small enough that the records it leaves in the DEVELOPER_TEST portal do not matter, and complete
+ * enough to exercise every HubSpot phase including the associations and the archive path.
+ */
+function tinyHubSpotWorkbook(evalIn, settings) {
+  const specs = evalIn('tabSpecs()');
+  const TAB = evalIn('TAB');
+  const cols = name => specs.filter(s => s.name === name)[0].cols.map(c => c.h);
+  const obj = (name, row, i) => {
+    const o = { _row: i + 2 };
+    cols(name).forEach((h, j) => { o[h] = row[j] === undefined ? '' : row[j]; });
+    return o;
+  };
+
+  settings.active_use_case = 'uc2';
+
+  const accounts = [obj(TAB.ACCOUNTS, ['hsprobe', 'uc2', 'HS Probe Logistics', 'hsprobe-logistics.com',
+    'Logistics and Supply Chain', 'established', 'Growth', 12000, 'T-300', 'S+60', 'S+60', 3, 1, 33, '', '', '',
+    'harness'], 0)];
+  accounts[0].lu_group_title = settings.group_title_prefix + 'HS Probe Logistics';
+  accounts[0].required_complete_actual = 33;
+
+  const people = [
+    obj(TAB.PEOPLE, ['hsp.ada', 'uc2', 'Ada', 'Probe', '', 'Platform Administrator', true, 'hsprobe', ''], 0),
+    obj(TAB.PEOPLE, ['hsp.femi', 'uc2', 'Femi', 'Probe', '', 'Operations Manager', false, 'hsprobe', ''], 1)
+  ];
+  people.forEach(p => { p.email = (p.first_name + '.' + p.last_name + '@hsprobe-logistics.com').toLowerCase(); });
+
+  const courses = [obj(TAB.COURSES, ['hsp-integrations', 'uc2', 'HS Probe Integrations', '',
+    7788730, 'harness'], 0)];
+  courses[0].reference_code = settings.course_ref_prefix + '-HSP-INTEGRATIONS';
+
+  const enrollments = [obj(TAB.ENROLLMENTS, ['e1', 'uc2', 'hsprobe', 'hsp-integrations', 'all',
+    '', '', 1, 0, '', 'T-130..T-70', 'T-140..T-100', '', '', 'harness'], 0)];
+  enrollments[0].enroll_count = 3;
+  enrollments[0].not_started_count = 2;
+
+  const cats = [
+    obj(TAB.TICKET_CATEGORIES, ['hsp-integrations-cat', 'HSP Integrations', 'hsp-integrations',
+      false, 'API returning 401 after key rotation|Webhook not firing on completion', 'harness'], 0),
+    obj(TAB.TICKET_CATEGORIES, ['hsp-gap', 'HSP Data Import', '', true,
+      'CSV import failing with no error message|Bulk upload times out', 'harness'], 1)
+  ];
+
+  const tickets = [
+    obj(TAB.TICKETS, ['t1', 'uc2', 'hsprobe', 'hsp-integrations-cat', 'T-180', 'T-91', 3,
+      'hsp.ada,hsp.femi', 'MEDIUM', 'Closed', 10, 'harness'], 0),
+    obj(TAB.TICKETS, ['t2', 'uc2', 'hsprobe', 'hsp-integrations-cat', 'T-90', 'T-1', 1,
+      'hsp.ada', 'MEDIUM', 'Closed', 10, 'harness'], 1),
+    obj(TAB.TICKETS, ['t3', 'uc2', 'hsprobe', 'hsp-gap', 'T-90', 'T-1', 2,
+      'hsp.femi', 'HIGH', 'Waiting on us', 48, 'harness'], 2)
+  ];
+
+  const deals = [obj(TAB.DEALS, ['d1', 'uc2', 'hsprobe', 'Sales Pipeline', 'Qualified To Buy',
+    12000, 'T+75', 'renewal', 'harness'], 0)];
+
+  sheets[TAB.ACCOUNTS] = accounts;
+  sheets[TAB.PEOPLE] = people;
+  sheets[TAB.COURSES] = courses;
+  sheets[TAB.ENROLLMENTS] = enrollments;
+  sheets[TAB.PERSONA_STATES] = [];
+  sheets[TAB.TICKET_CATEGORIES] = cats;
+  sheets[TAB.TICKETS] = tickets;
+  sheets[TAB.DEALS] = deals;
+  sheets[TAB.SCENARIOS] = [obj(TAB.SCENARIOS, ['uc2', 'HubSpot probe', 'harness', '', 'testing', ''], 0)];
+}
 
 // --- run --------------------------------------------------------------------
 function show(label) {
@@ -239,6 +325,42 @@ function manifestTable() {
   console.log('\n  _Manifest (' + sheets._Manifest.length + ' rows)');
   sheets._Manifest.forEach(r => console.log('    ' + String(r.object_type).padEnd(12) +
     String(r.class).padEnd(11) + String(r.external_id).padEnd(12) + r.natural_key));
+}
+
+if (MODE === 'hubspot') {
+  console.log('HubSpot portal: ' + (env.HUBSPOT_TOKEN ? 'token loaded' : 'NO TOKEN in .env'));
+
+  evalIn('checkHubSpotCredentials()'); show('CHECK CONNECTION');
+  evalIn('checkHubSpotPipelines()');   show('PIPELINES');
+  evalIn('setupHubSpotProperties()');  show('PROPERTIES');
+
+  evalIn('previewSeedPlan()');         show('PREVIEW');
+
+  evalIn('seedHubSpotCompanies()');    show('PHASE 5 — companies and contacts');
+  evalIn('seedHubSpotTickets()');      show('PHASE 6 — tickets');
+  evalIn('seedHubSpotDeals()');        show('PHASE 7 — deals');
+  manifestTable();
+
+  // Idempotency: a second run must create nothing.
+  evalIn('seedHubSpotCompanies()');    show('PHASE 5 AGAIN — must say "nothing to do"');
+  evalIn('seedHubSpotTickets()');      show('PHASE 6 AGAIN — must say "nothing to do"');
+
+  fs.writeFileSync(STATE_PATH, JSON.stringify({ manifest: sheets._Manifest }, null, 2));
+  console.log('\n  state written to ' + STATE_PATH + '  (run "hubspot-reset" to archive it all)');
+  console.log('\n  HTTP calls: ' + CALLS);
+  process.exit(0);
+}
+
+if (MODE === 'hubspot-reset') {
+  const state = fs.existsSync(STATE_PATH) ? JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')) : { manifest: [] };
+  sheets._Manifest = state.manifest || [];
+  host.typed = 'RESET UC2';
+  console.log('Manifest rows loaded: ' + sheets._Manifest.length);
+  evalIn('resetHubSpot()');            show('RESET HUBSPOT');
+  manifestTable();
+  fs.writeFileSync(STATE_PATH, JSON.stringify({ manifest: sheets._Manifest }, null, 2));
+  console.log('\n  HTTP calls: ' + CALLS);
+  process.exit(0);
 }
 
 if (process.argv[2] === 'teardown') {

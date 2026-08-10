@@ -326,10 +326,15 @@ Filler learners are not listed here — the expander generates them from `user_c
 
 ### `Enrollments` — declarations
 `row_id` · `use_case` → · `account_key` → · `course_key` → · `audience` → (`all`|`admins`) ·
-`enroll_count` ƒ · `completed_count` · `in_progress_count` · `not_started_count` ƒ · `due_offset` ·
+`enroll_count_override` · `enroll_count` ƒ · `completed_count` · `in_progress_count` · `not_started_count` ƒ · `due_offset` ·
 `complete_offset` · `in_progress_pct` · `last_access_offset` · `notes`
 
 One row per account × course. Counts are explicit; percentages are derived and checked.
+
+`enroll_count_override` was added 2026-08-10 for scenario 2, which needs states a headcount cannot
+express: **0** means "this account enrolled nobody", and **16** of an 18-person account means
+"they assigned it to most people". Both are findings in their own right. Blank falls back to the
+audience headcount, so scenario 1 is unaffected.
 
 ### `PersonaStates` — pin a named person's state
 `row_id` · `use_case` → · `person_key` → · `course_key` → · `status` → · `percentage` ·
@@ -339,7 +344,13 @@ Pins are applied first; the declared counts then fill the remaining slots. Valid
 exceed a declared count.
 
 ### `TicketCategories` · `Tickets` · `Deals`
-Authored now, inert until HubSpot lands. A category with `is_deliberate_gap = TRUE` must have an
+`TicketCategories` carries `subject_templates`, a pipe-separated list of real ticket subjects picked
+deterministically per ticket. They appear verbatim in demo answers, so the taxonomy owns its own
+phrasing rather than the code generating `<Category> question` 230 times.
+
+`Tickets` rows are declarations — one row per account × category × window with a `count`. The
+expander spreads that count across the window with hash jitter, so 34 tickets over 90 days scatter
+instead of landing on one date, and rotates the named filers round-robin. A category with `is_deliberate_gap = TRUE` must have an
 empty `course_key`, and no course may exist whose title matches a gap label — this turns "don't let
 anyone add a Data Import course" into an automated test.
 
@@ -504,7 +515,42 @@ are different numbers: Michael is userId `48285255`, ownerId `268202805`. Passin
 with `INVALID_OWNER_ID`. Resolve owners through `GET /crm/v3/owners` and match on email — never
 assume an id from another HubSpot screen is the one this field wants.
 
-### HubSpot (v3/v4, Bearer) — later phase
+### HubSpot quirks — measured 2026-08-10, portal 23399533
+
+Established by seeding a miniature scenario 2 end to end with `node tools/seed-local.js hubspot`,
+then reading every record back. All five cost a round trip.
+
+**1. One bad enumeration value fails the ENTIRE batch.** `industry` has 148 fixed options and
+"Logistics" is not one of them — the whole 100-record create returns 400 and nothing lands. This is
+the batch-equivalent of LearnUpon's silent 200 and needs the opposite reflex: resolve enum values
+against the portal *before* sending. `hsEnumValue_()` reads the option list once and matches on
+label or value ignoring case, spaces, ampersands and slashes, so the scenario file can say
+`Oil & Energy` and the portal gets `OIL_ENERGY`. An unmatched value is dropped with a note rather
+than being allowed to take the batch down.
+
+**2. Batch results are not positional.** A partially successful batch returns fewer results than
+inputs, so matching results back by array index silently mis-assigns ids. Every created record
+carries `demo_natural_key` and results are matched on that.
+
+**3. `demo_natural_key` is what makes any of this safe.** It is the same stable key the manifest
+uses, written as a custom property on companies, contacts, tickets and deals. It gives adoption
+after a lost manifest, and it gives Layer 2 something exact to verify before an archive.
+
+**4. The v4 `batch/associate/default` endpoint spares us hard-coded association type ids**, which
+differ between portals. Reading associations back shows two entries per pair — a numeric typeId and
+`Primary`. That is one association shown twice, not two companies. Verified.
+
+**5. Everything scenario 2 needs is settable and verified by read-back:** ticket `createdate`
+backdated to any day in a 90-day window, `ticket_category`, `hs_pipeline_stage` by label, priority,
+company date properties, deal `closedate` and `amount`. Pipeline and stage IDs are resolved from
+labels at seed time, so a scenario file names stages in words.
+
+**Verified refusal.** Two manifest rows were forged to point at real tickets belonging to someone
+else. Reset refused both — `no demo_source tag — not ours, refusing to archive` — and left the
+ledger rows in place, because a refused delete must not clear the manifest. That is the safety
+model working on the one case that matters.
+
+### HubSpot (v3/v4, Bearer)
 
 Batch endpoints 100 per call. **Search API is far stricter (~4 req/sec)** — never build a
 search-per-record loop; fetch once and build a local email→ID map. Batch responses can be partially
@@ -540,7 +586,8 @@ successful.
 | 6 | Enrollments, due dates, completions | done |
 | 7 | `Reset.gs` + `Verify.gs` | done |
 | 8 | `Refresh.gs` — safe path and rebuild path | done |
-| 9 | HubSpot | |
+| 9 | `HubSpot.gs` client + properties, `HubSpotSeed.gs` companies/contacts/tickets/deals + reset | done |
+| 10 | Scenario 2 data — five accounts of its own, 230 tickets, the deflection curve | done |
 
 **Build reset and verify before running a large seed.** Being able to clean up is more urgent than
 being able to create at scale, and it is the natural instinct to get backwards. Test reset against a

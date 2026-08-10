@@ -138,7 +138,9 @@ function buildWorkbook(evalIn) {
 
   enrollments.forEach(e => {
     const acct = acctByKey[e.account_key];
-    e.enroll_count = acct ? Number(e.audience === 'admins' ? acct.admin_count : acct.user_count) : '';
+    e.enroll_count = String(e.enroll_count_override) !== '' && e.enroll_count_override !== undefined
+      ? Number(e.enroll_count_override)
+      : (acct ? Number(e.audience === 'admins' ? acct.admin_count : acct.user_count) : '');
     e.not_started_count = e.enroll_count === ''
       ? '' : Math.max(0, e.enroll_count - Number(e.completed_count || 0) - Number(e.in_progress_count || 0));
   });
@@ -228,45 +230,106 @@ plan.learnupon.groups.slice(0, 3).forEach(g => console.log('  "' + g.title + '"'
 
 console.log('\nCourses');
 plan.learnupon.courses.forEach(c =>
-  console.log('  ' + c.title + '   ref=' + c.reference_code + '   clone from ' + c.clone_source_course_id));
+  console.log('  ' + c.title + '   ref=' + c.reference_code +
+    '   module ' + (c.source_module_id || 'MISSING')));
 
-console.log('\nAlderfield users (first 8 of 16)');
-plan.learnupon.users.filter(u => u.account_key === 'alderfield').slice(0, 8).forEach(u =>
-  console.log('  ' + (u.email + '                                   ').slice(0, 38) +
-    (u.is_admin ? '[admin] ' : '        ') + u.job_title));
+// The first account in the plan, whichever scenario is loaded. Hard-coding uc1's accounts here
+// meant the sample section crashed the moment a second scenario was written.
+const firstAccount = (plan.stats.byAccount[0] || {}).account_key;
+if (firstAccount) {
+  const users = plan.learnupon.users.filter(u => u.account_key === firstAccount);
+  console.log('\n' + firstAccount + ' users (first 8 of ' + users.length + ')');
+  users.slice(0, 8).forEach(u =>
+    console.log('  ' + (u.email + '                                   ').slice(0, 40) +
+      (u.is_admin ? '[admin] ' : '        ') + u.job_title));
+}
 
-console.log('\nAlderfield — Getting Started with ACME (the 16/6/4/6 matrix)');
-const gs = plan.learnupon.enrollments.filter(e =>
-  e.account_key === 'alderfield' && e.course_key === 'nce-getting-started');
-['completed', 'in_progress', 'not_started'].forEach(s => {
-  const n = gs.filter(e => e.status === s).length;
-  console.log('  ' + (s + '            ').slice(0, 13) + n +
-    '   overdue: ' + gs.filter(e => e.status === s && e.overdue).length);
+console.log('\nEnrollment matrix — account x course');
+const courseKeys = plan.learnupon.courses.map(c => c.course_key);
+plan.stats.byAccount.forEach(a => {
+  courseKeys.forEach(ck => {
+    const set = plan.learnupon.enrollments.filter(e =>
+      e.account_key === a.account_key && e.course_key === ck);
+    if (!set.length) return;
+    const n = s => set.filter(e => e.status === s).length;
+    console.log('  ' + (a.account_key + '              ').slice(0, 14) +
+      (ck + '                          ').slice(0, 26) +
+      'enrolled ' + String(set.length).padStart(3) +
+      '   done ' + String(n('completed')).padStart(3) +
+      '   not started ' + String(n('not_started')).padStart(3) +
+      '   overdue ' + String(set.filter(e => e.overdue).length).padStart(3));
+  });
 });
 
-console.log('\nAlderfield — the three blockers');
-['alderfield.dana', 'alderfield.marcus', 'alderfield.tom'].forEach(pk => {
-  console.log('  ' + pk);
-  plan.learnupon.enrollments
-    .filter(e => e.user_natural_key === 'user:person:' + pk)
-    .forEach(e => console.log('      ' + (e.course_title + '                                  ').slice(0, 34) +
-      (e.status + '           ').slice(0, 12) +
-      'due ' + fmt(e.due_date) + (e.overdue ? ' OVERDUE' : '        ') +
-      (e.percentage !== null && e.status === 'in_progress' ? '  ' + e.percentage + '%' : '') +
-      (e.date_completed ? '  completed ' + fmt(e.date_completed) : '') +
-      (e.date_last_accessed ? '  last seen ' + fmt(e.date_last_accessed) : '')));
-});
+const done = plan.learnupon.enrollments.filter(e => e.date_completed)
+  .map(e => new Date(e.date_completed).getTime());
+if (done.length) {
+  console.log('\nCompletion window: ' + fmt(Math.min.apply(null, done)) +
+    '  ->  ' + fmt(Math.max.apply(null, done)));
+}
 
-console.log('\nEstablished cohort — onboarding duration');
-['cobaltpeak', 'fernpath', 'harborline', 'halden', 'larkspur', 'northwind'].forEach(key => {
-  const done = plan.learnupon.enrollments
-    .filter(e => e.account_key === key && e.date_completed)
-    .map(e => new Date(e.date_completed).getTime());
-  const acct = sheetState['Accounts'].filter(a => a.account_key === key)[0];
-  console.log('  ' + (key + '            ').slice(0, 13) +
-    'core training finished ' + fmt(Math.max.apply(null, done)) +
-    '   go-live ' + acct.actual_go_live_offset);
-});
+// --- HubSpot -----------------------------------------------------------------
+const h = plan.hubspot;
+if (h.tickets.length || h.companies.length) {
+  console.log('\n' + '='.repeat(78));
+  console.log('HUBSPOT');
+  console.log('='.repeat(78));
+
+  console.log('\nCompanies');
+  h.companies.forEach(c => console.log('  ' + (c.name + '                              ').slice(0, 30) +
+    (c.domain + '                          ').slice(0, 26) +
+    'live ' + fmt(c.actual_go_live_date)));
+
+  if (h.tickets.length) {
+    const T = new Date(plan.anchor + 'T00:00:00Z').getTime();
+    const DAY = 86400000;
+    const recent = t => (T - new Date(t.created_at).getTime()) / DAY <= 90;
+
+    console.log('\nTickets by category — the Story 1 and Story 2 table');
+    console.log('  ' + 'category'.padEnd(26) + 'prior 90d'.padStart(10) +
+      'last 90d'.padStart(10) + '   change   has course');
+    const cats = {};
+    h.tickets.forEach(t => {
+      const c = cats[t.category_label] = cats[t.category_label] || { r: 0, p: 0, key: t.category_key };
+      if (recent(t)) c.r++; else c.p++;
+    });
+    const catRows = sheetState['TicketCategories'] || [];
+    const courseFor = k => (catRows.filter(c => c.category_key === k)[0] || {}).course_key || '';
+    Object.keys(cats).sort((a, b) => cats[b].r - cats[a].r).forEach(label => {
+      const c = cats[label];
+      const delta = c.p ? Math.round(100 * (c.r - c.p) / c.p) : 0;
+      console.log('  ' + label.padEnd(26) + String(c.p).padStart(10) + String(c.r).padStart(10) +
+        '   ' + (delta > 0 ? '+' : '') + String(delta).padStart(4) + '%   ' +
+        (courseFor(c.key) ? courseFor(c.key) : '*** NO COURSE ***'));
+    });
+
+    console.log('\nIntegrations tickets by account — did training deflect them?');
+    console.log('  ' + 'account'.padEnd(14) + 'prior'.padStart(7) + 'last90'.padStart(8) +
+      '   masterclass completions');
+    plan.stats.byAccount.forEach(a => {
+      const mine = h.tickets.filter(t => t.account_key === a.account_key &&
+        t.category_key === 'integrations');
+      if (!mine.length) return;
+      const mc = plan.learnupon.enrollments.filter(e => e.account_key === a.account_key &&
+        e.course_key === 'kb-integrations' && e.status === 'completed').length;
+      console.log('  ' + a.account_key.padEnd(14) +
+        String(mine.filter(t => !recent(t)).length).padStart(7) +
+        String(mine.filter(recent).length).padStart(8) + '   ' + mc);
+    });
+
+    const totals = { recent: h.tickets.filter(recent).length, prior: h.tickets.filter(t => !recent(t)).length };
+    console.log('\n  totals: ' + totals.prior + ' prior, ' + totals.recent + ' in the last 90 days');
+
+    const noFiler = h.tickets.filter(t => !t.contact_email).length;
+    if (noFiler) console.log('  WARNING: ' + noFiler + ' ticket(s) have no contact to file them.');
+  }
+
+  if (h.deals.length) {
+    console.log('\nDeals');
+    h.deals.forEach(d => console.log('  ' + d.name + '   ' + d.amount +
+      '   closes ' + fmt(d.close_date) + '   ' + d.stage_label));
+  }
+}
 
 console.log('\n_Preview rows: ' + r.previewRows);
 

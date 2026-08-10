@@ -152,7 +152,9 @@ function expand(wb) {
     const all = usersByAccount[acct.account_key] || [];
     const candidates = audience === 'admins' ? all.filter(u => u.is_admin) : all;
 
-    let want = num_(row.enroll_count, null);
+    // An explicit override wins, including zero — "this account enrolled nobody" is a finding.
+    let want = num_(row.enroll_count_override, null);
+    if (want === null) want = num_(row.enroll_count, null);
     if (want === null) want = num_(audience === 'admins' ? acct.admin_count : acct.user_count, 0);
     if (candidates.length < want) {
       warnings.push('Enrollments row ' + row._row + ' (' + row.account_key + '/' + row.course_key +
@@ -267,9 +269,183 @@ function expand(wb) {
     });
   });
 
+  // --- HubSpot -------------------------------------------------------------
+  expandHubSpot_(wb, plan, T, seed, accountByKey, personasByAccount, warnings);
+
   plan.stats.byAccount = accountStats_(wb.accounts, plan);
   return plan;
 }
+
+// ---------------------------------------------------------------------------
+// HubSpot
+// ---------------------------------------------------------------------------
+
+/**
+ * Companies, contacts, tickets and deals.
+ *
+ * The cross-system join is the EMAIL DOMAIN and nothing else — a HubSpot contact matches a
+ * LearnUpon user because the addresses are identical, which is why People.email is computed rather
+ * than typed. Get that wrong and the demo's central question ("are the people filing tickets the
+ * ones who skipped the training?") silently returns nothing.
+ *
+ * Contacts are the named personas only. Filler learners exist in LearnUpon to make the completion
+ * denominators real, but a HubSpot contact for each would add 60 records that no story reads.
+ */
+function expandHubSpot_(wb, plan, T, seed, accountByKey, personasByAccount, warnings) {
+  const hs = plan.hubspot;
+
+  const catByKey = {};
+  wb.ticketCategories.forEach(c => { if (c.category_key) catByKey[c.category_key] = c; });
+
+  const ctxByAccount = {};
+  wb.accounts.forEach(acct => {
+    if (!acct.account_key) return;
+    try {
+      ctxByAccount[acct.account_key] = accountDateContext(acct, T);
+    } catch (e) {
+      warnings.push('Accounts ' + acct.account_key + ': ' + e.message);
+      return;
+    }
+    const ctx = ctxByAccount[acct.account_key];
+
+    hs.companies.push({
+      natural_key: 'hs:company:' + acct.account_key,
+      account_key: acct.account_key,
+      use_case: acct.use_case,
+      name: String(acct.company_name || '').trim(),
+      domain: String(acct.domain || '').trim().toLowerCase(),
+      industry: String(acct.industry || '').trim(),
+      arr: num_(acct.arr, null),
+      plan_tier: String(acct.plan_tier || '').trim(),
+      csm_owner_email: String(acct.csm_owner_email || '').trim(),
+      onboarding_start_date: ctx.S,
+      target_go_live_date: ctx.G,
+      actual_go_live_date: ctx.A || null
+    });
+  });
+
+  // --- contacts ------------------------------------------------------------
+  const contactByPersonKey = {};
+  wb.people.forEach(p => {
+    if (!p.person_key || !p.account_key) return;
+    const acct = accountByKey[p.account_key];
+    if (!acct) return;   // Validate.gs reports the dangling reference
+    const c = {
+      natural_key: 'hs:contact:' + p.person_key,
+      person_key: p.person_key,
+      account_key: p.account_key,
+      use_case: p.use_case || acct.use_case,
+      email: String(p.email || '').trim().toLowerCase(),
+      first_name: String(p.first_name || '').trim(),
+      last_name: String(p.last_name || '').trim(),
+      job_title: String(p.job_title || '').trim()
+    };
+    contactByPersonKey[p.person_key] = c;
+    hs.contacts.push(c);
+  });
+
+  // --- tickets -------------------------------------------------------------
+  wb.tickets.forEach(row => {
+    if (!row.account_key || !row.category_key) return;
+    const acct = accountByKey[row.account_key];
+    const cat = catByKey[row.category_key];
+    const ctx = ctxByAccount[row.account_key];
+    if (!acct || !cat || !ctx) return;
+
+    const count = num_(row.count, 0);
+    if (count <= 0) return;
+
+    let windowSpec;
+    try {
+      // window_start..window_end is an ordinary range spec, so each ticket lands on its own day
+      // inside it. Declaring 34 tickets over 90 days produces a scatter, not 34 identical dates.
+      windowSpec = parseOffsetSpec(String(row.window_start).trim() + '..' +
+        String(row.window_end).trim());
+    } catch (e) {
+      warnings.push('Tickets row ' + row._row + ': ' + e.message);
+      return;
+    }
+
+    const filers = String(row.contact_person_keys || '').split(',')
+      .map(k => k.trim()).filter(k => k)
+      .map(k => contactByPersonKey[k])
+      .filter(c => c);
+    if (!filers.length) {
+      const fallback = (personasByAccount[row.account_key] || [])
+        .map(p => contactByPersonKey[p.person_key]).filter(c => c);
+      filers.push.apply(filers, fallback);
+    }
+    if (!filers.length) {
+      warnings.push('Tickets row ' + row._row + ' (' + row.account_key + '/' + row.category_key +
+        '): no contact to file them, so ' + count + ' ticket(s) will have no requester.');
+    }
+
+    const subjects = String(cat.subject_templates || '').split('|')
+      .map(t => t.trim()).filter(t => t);
+
+    for (let i = 0; i < count; i++) {
+      const nk = 'hs:ticket:' + row.row_id + ':' + pad2_(i + 1);
+      let created;
+      try {
+        created = resolveOffsetSpec(windowSpec, ctx, 'tkt|' + nk, seed);
+      } catch (e) {
+        warnings.push('Tickets row ' + row._row + ': ' + e.message);
+        break;
+      }
+      const filer = filers.length ? filers[i % filers.length] : null;
+      const subject = subjects.length
+        ? subjects[hash32(nk + '|subj', seed) % subjects.length]
+        : String(cat.label || row.category_key) + ' question';
+
+      hs.tickets.push({
+        natural_key: nk,
+        row_id: row.row_id,
+        account_key: row.account_key,
+        use_case: row.use_case || acct.use_case,
+        category_key: row.category_key,
+        category_label: String(cat.label || row.category_key),
+        subject: subject,
+        company_name: String(acct.company_name || '').trim(),
+        contact_natural_key: filer ? filer.natural_key : null,
+        contact_email: filer ? filer.email : null,
+        priority: String(row.priority || 'MEDIUM').trim().toUpperCase(),
+        stage_label: String(row.status || '').trim(),
+        created_at: created,
+        resolution_hours: num_(row.resolution_hours, null)
+      });
+    }
+  });
+
+  // --- deals ---------------------------------------------------------------
+  wb.deals.forEach(row => {
+    if (!row.account_key) return;
+    const acct = accountByKey[row.account_key];
+    const ctx = ctxByAccount[row.account_key];
+    if (!acct || !ctx) return;
+    let close;
+    try {
+      close = resolveOffsetSpec(parseOffsetSpec(row.close_offset), ctx, 'deal|' + row.row_id, seed);
+    } catch (e) {
+      warnings.push('Deals row ' + row._row + ': ' + e.message);
+      return;
+    }
+    hs.deals.push({
+      natural_key: 'hs:deal:' + row.row_id,
+      row_id: row.row_id,
+      account_key: row.account_key,
+      use_case: row.use_case || acct.use_case,
+      name: String(acct.company_name || '').trim() + ' — ' +
+        String(row.deal_type || 'renewal').trim().replace(/^./, ch => ch.toUpperCase()),
+      pipeline_label: String(row.pipeline || '').trim(),
+      stage_label: String(row.stage || '').trim(),
+      amount: num_(row.amount, null),
+      deal_type: String(row.deal_type || '').trim(),
+      close_date: close
+    });
+  });
+}
+
+function pad2_(n) { return (n < 10 ? '0' : '') + n; }
 
 /**
  * Narrows a plan to one scenario.
@@ -305,7 +481,12 @@ function planForScope_(plan, scope) {
         inScope_(c.use_case, scope) || courseKeysUsed[c.course_key]),
       enrollments: enrollments
     },
-    hubspot: plan.hubspot,
+    hubspot: {
+      companies: plan.hubspot.companies.filter(c => mine(c.account_key)),
+      contacts: plan.hubspot.contacts.filter(c => mine(c.account_key)),
+      tickets: plan.hubspot.tickets.filter(t => mine(t.account_key)),
+      deals: plan.hubspot.deals.filter(d => mine(d.account_key))
+    },
     manualTouches: plan.manualTouches.filter(m => mine(m.account_key)),
     stats: { byAccount: plan.stats.byAccount.filter(a => mine(a.account_key)) },
     warnings: plan.warnings
@@ -455,10 +636,24 @@ function planSummary(plan) {
       '  (' + l.enrollments.filter(e => e.status === 'completed').length + ' completed, ' +
       l.enrollments.filter(e => e.status === 'in_progress').length + ' in progress, ' +
       l.enrollments.filter(e => e.status === 'not_started').length + ' not started)',
-    '  overdue ........ ' + l.enrollments.filter(e => e.overdue).length,
-    '',
-    'Per account — required training complete'
+    '  overdue ........ ' + l.enrollments.filter(e => e.overdue).length
   ];
+
+  const h = plan.hubspot;
+  if (h.companies.length || h.tickets.length || h.deals.length) {
+    lines.push('', 'HubSpot records to create',
+      '  companies ...... ' + h.companies.length,
+      '  contacts ....... ' + h.contacts.length,
+      '  tickets ........ ' + h.tickets.length,
+      '  deals .......... ' + h.deals.length);
+    const byCat = {};
+    h.tickets.forEach(t => { byCat[t.category_label] = (byCat[t.category_label] || 0) + 1; });
+    Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]).forEach(k => {
+      lines.push('      ' + pad_(k, 32) + byCat[k]);
+    });
+  }
+
+  lines.push('', 'Per account — required training complete');
   plan.stats.byAccount.forEach(s => {
     if (!s.enrollments) return;
     const drift = (s.target !== null && s.actual !== null) ? Math.abs(s.target - s.actual) : 0;

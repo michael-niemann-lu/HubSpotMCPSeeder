@@ -101,6 +101,8 @@ apps-script/               the files pasted into the editor
   Seed.gs                  the four write phases
   Reset.gs                 reset, verify, repair manifest, remove strays
   Refresh.gs               shift due dates (safe) and rebuild enrollments (destructive)
+  HubSpot.gs               HubSpot client, custom properties, read-only checks
+  HubSpotSeed.gs           HubSpot write phases and the archive path
   Menu.gs                  menu wiring and the per-scenario wrappers
   Version.gs               TOOLKIT_VERSION — bump it with any shared-file change
 tools/
@@ -108,6 +110,7 @@ tools/
   seed-local.js            run the REAL seed/reset/verify against a portal, sheet faked
   probe-api.js             read-only LearnUpon diagnostics
   hubspot-probe.js         read-only HubSpot diagnostics
+  seed-local.js            run the REAL phases against a portal, sheet faked
   spike.js                 API spikes; writes to a portal
 ```
 
@@ -121,14 +124,16 @@ tools load it themselves and print only status codes.
 ```
 MCP Demo Seeder
 ├─ Setup ▸ Create / Repair Workbook │ Credentials │ Check Custom Fields │ Check Course Source │ Find a Module
+│         Check HubSpot Connection │ Show HubSpot Pipelines │ Create / Update HubSpot Properties
 ├─ Scenario 1 — Customer Onboarding Health (Nik) ▸
 │    Load Sheet Data from Scenario1.gs
 │    Validate │ Preview (dry run)
 │    Refresh — add & update          <- the everyday action; idempotent, re-runnable
 │    Verify
-│    Seed step by step ▸ 1-4 │ Shift Due Dates only
+│    Seed step by step ▸ LearnUpon 1-4 │ HubSpot 5-7 │ Shift Due Dates only
 │    Rebuild Enrollments (moves completion dates)   <- destructive
 │    Reset — delete this scenario's enrollments      <- destructive
+│    Reset HubSpot — archive this scenario's tickets and deals  <- destructive
 ├─ Scenario 2 — … (Michael) ▸ same
 ├─ Scenario 3 — … (Brian) ▸ same
 └─ Developer ▸ Unit Tests │ Column Contract │ Resolved Dates │ API Probe │ Repair Manifest │ Remove Stray Enrollments
@@ -150,7 +155,11 @@ Measured, not assumed. Full detail in `CLAUDE.md`.
   `{"remove_from_history": "true"}` as a **string**. The boolean is rejected.
 - **A 2xx does not mean the write happened.** This API returns `200 {"success":"ok"}` for several
   no-ops. Every write is verified by reading it back.
-- **Users are never deleted** by this toolkit. Everything else can be removed.
+- **Users are never deleted** by this toolkit. Everything else can be removed. On the HubSpot side
+  companies and contacts are equally persistent — Reset archives tickets and deals only.
+- **HubSpot fails a whole batch for one bad value.** An `industry` of "Logistics" (not one of its
+  148 options) kills all 100 records in the call. Enum values are resolved against the portal
+  before sending, and dropped with a note if they do not match.
 
 ## Seed, Refresh, Reset
 

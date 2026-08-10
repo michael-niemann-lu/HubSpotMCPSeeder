@@ -499,9 +499,21 @@ function validateStats_(plan, accountByKey, err, warn) {
         ' is in-flight but has no overdue enrollments, so it cannot appear as "behind on required ' +
         'training". Move due_offset earlier.');
     }
+    // "established" means different things per scenario: in uc1 it is "finished onboarding, should
+    // be near 100%", in uc2 it is "live customer who still has training gaps, and the gap IS the
+    // story". A scenario that declares the completion it wants is taken at its word — otherwise
+    // this fires on every uc2 account and teaches everyone to ignore warnings.
     if (String(s.cohort).trim() === 'established' && s.actual !== null && s.actual < 100) {
-      warn(TAB.ACCOUNTS, acct._row, 'cohort', s.account_key + ' is established but only ' + s.actual +
-        '% complete. Story 2 assumes these accounts finished their training.');
+      const declared = expectedCompletionFor_(s.use_case, s.account_key);
+      if (declared === null) {
+        warn(TAB.ACCOUNTS, acct._row, 'cohort', s.account_key + ' is established but only ' +
+          s.actual + '% complete. If that is deliberate, declare it in scenario' +
+          String(s.use_case).replace('uc', '') + 'Expected() and this warning will stop.');
+      } else if (Math.abs(declared - s.actual) > 2) {
+        warn(TAB.ACCOUNTS, acct._row, 'cohort', s.account_key + ' is at ' + s.actual +
+          '% but scenario' + String(s.use_case).replace('uc', '') + 'Expected() declares ' +
+          declared + '%. One of the two is out of date.');
+      }
     }
     if (s.admins === 0) {
       warn(TAB.ACCOUNTS, acct._row, 'admin_count', s.account_key + ' has no admins, so any ' +
@@ -623,5 +635,17 @@ function validateCrossScenario_(wb, err, warn) {
     warn(TAB.SETTINGS, '', 'active_use_case', 'Settings.active_use_case is "' + scope +
       '" but no accounts exist for it. Every action is filtered to this scenario, so Preview and ' +
       'Seed will do nothing until it has accounts — or until you point it at a different scenario.');
+  }
+}
+
+
+/** The completion a scenario file says it wants for an account, or null if it does not say. */
+function expectedCompletionFor_(useCase, accountKey) {
+  try {
+    const exp = scenarioExpectedFor(useCase);
+    const a = exp && exp.accounts && exp.accounts[accountKey];
+    return a && typeof a.completion === 'number' ? a.completion : null;
+  } catch (e) {
+    return null;
   }
 }

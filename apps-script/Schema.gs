@@ -136,10 +136,11 @@ function tabSpecs() {
         { h: 'account_key', w: 130, ref: [TAB.ACCOUNTS, 1] },
         { h: 'course_key', w: 175, ref: [TAB.COURSES, 1] },
         { h: 'audience', w: 90, list: ENUM.AUDIENCE, note: 'all = every user at the account. admins = admins only.' },
-        { h: 'enroll_count', w: 105, f: '=IF(OR(LEN($C{r})=0,LEN($E{r})=0),"",IFERROR(VLOOKUP($C{r},AccountsAll,IF($E{r}="admins",13,12),FALSE),"?"))', note: 'Computed from the account headcount.' },
+        { h: 'enroll_count_override', w: 150, note: 'Leave blank to enrol the whole audience. Set a number to enrol only some of them — 16 of 18 learners, or 0 for "this account enrolled nobody", which is a finding in its own right.' },
+        { h: 'enroll_count', w: 105, f: '=IF(LEN($F{r})>0,$F{r},IF(OR(LEN($C{r})=0,LEN($E{r})=0),"",IFERROR(VLOOKUP($C{r},AccountsAll,IF($E{r}="admins",13,12),FALSE),"?")))', note: 'Computed: the override if set, otherwise the account headcount.' },
         { h: 'completed_count', w: 130 },
         { h: 'in_progress_count', w: 140 },
-        { h: 'not_started_count', w: 140, f: '=IF(LEN($F{r})=0,"",MAX(0,$F{r}-N($G{r})-N($H{r})))', note: 'Computed remainder.' },
+        { h: 'not_started_count', w: 140, f: '=IF(LEN($G{r})=0,"",MAX(0,$G{r}-N($H{r})-N($I{r})))', note: 'Computed remainder.' },
         { h: 'due_offset', w: 130, note: 'Token or range, e.g. G-40..G-5. Ranges jitter per person, so overdue counts emerge from the data.' },
         { h: 'complete_offset', w: 145, note: 'When completions land, e.g. S+10..S+55.' },
         { h: 'in_progress_pct', w: 130, note: 'Number or range, e.g. 15..70.' },
@@ -168,6 +169,7 @@ function tabSpecs() {
         { h: 'label', w: 220 },
         { h: 'course_key', w: 175, ref: [TAB.COURSES, 1], note: 'Blank when this is a deliberate content gap.' },
         { h: 'is_deliberate_gap', w: 140, check: true, note: 'TRUE means we must NOT have training for it. Protected by validation.' },
+        { h: 'subject_templates', w: 420, note: 'Pipe-separated ticket subjects, picked deterministically per ticket. These appear verbatim in demo answers, so write them the way a real customer would.' },
         { h: 'notes', w: 300 }
       ]
     },
@@ -386,8 +388,8 @@ function buildNamedRanges_(ss) {
     AccountsKeyDomain: ss.getSheetByName(TAB.ACCOUNTS).getRange(2, 1, LAST_ROW - 1, 4),
     AccountKeys: ss.getSheetByName(TAB.ACCOUNTS).getRange(2, 1, LAST_ROW - 1, 1),
     EnrollAccount: ss.getSheetByName(TAB.ENROLLMENTS).getRange(2, 3, LAST_ROW - 1, 1),
-    EnrollCount: ss.getSheetByName(TAB.ENROLLMENTS).getRange(2, 6, LAST_ROW - 1, 1),
-    EnrollCompleted: ss.getSheetByName(TAB.ENROLLMENTS).getRange(2, 7, LAST_ROW - 1, 1),
+    EnrollCount: ss.getSheetByName(TAB.ENROLLMENTS).getRange(2, 7, LAST_ROW - 1, 1),
+    EnrollCompleted: ss.getSheetByName(TAB.ENROLLMENTS).getRange(2, 8, LAST_ROW - 1, 1),
     GroupTitlePrefix: settingCell('group_title_prefix'),
     CourseRefPrefix: settingCell('course_ref_prefix')
   };

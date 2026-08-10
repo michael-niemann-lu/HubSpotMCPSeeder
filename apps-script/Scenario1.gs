@@ -152,39 +152,40 @@ function scenario1Courses_() {
 }
 
 function scenario1Enrollments_() {
-  // row_id, use_case, account, course, audience, [count ƒ], completed, in_progress,
-  // [not_started ƒ], due_offset, complete_offset, in_progress_pct, last_access_offset, notes
+  // row_id, use_case, account, course, audience, enroll_count_override, [count ƒ], completed,
+  // in_progress, [not_started ƒ], due_offset, complete_offset, in_progress_pct,
+  // last_access_offset, notes
   const rows = [
     // Alderfield — 28 enrollments, 7 completed = 25%
-    ['a1', 'uc1', 'alderfield', 'nce-getting-started', 'all', '', 6, 1, '',
+    ['a1', 'uc1', 'alderfield', 'nce-getting-started', 'all', '', '', 6, 1, '',
       'G-40..G-5', 'S+12..S+55', '20..70', 'T-30..T-3', ''],
-    ['a2', 'uc1', 'alderfield', 'nce-admin-essentials', 'admins', '', 1, 1, '',
+    ['a2', 'uc1', 'alderfield', 'nce-admin-essentials', 'admins', '', '', 1, 1, '',
       'G-30..G-18', 'S+30..S+50', '20..55', 'T-25..T-6', 'Dana has not started this one.'],
-    ['a3', 'uc1', 'alderfield', 'nce-platform-setup', 'admins', '', 0, 1, '',
+    ['a3', 'uc1', 'alderfield', 'nce-platform-setup', 'admins', '', '', 0, 1, '',
       'G-21..G-12', '', '25..40', 'T-24..T-18', 'Nobody has finished it.'],
-    ['a4', 'uc1', 'alderfield', 'nce-launch-readiness', 'admins', '', 0, 0, '',
+    ['a4', 'uc1', 'alderfield', 'nce-launch-readiness', 'admins', '', '', 0, 0, '',
       'G-20..G-13', '', '', '',
       'Not one administrator has attempted it, and all four are overdue. Prerequisite for go-live sign-off.'],
 
     // Copperlane — 21 enrollments, 13 completed = 62%
-    ['b1', 'uc1', 'copperlane', 'nce-getting-started', 'all', '', 9, 0, '',
+    ['b1', 'uc1', 'copperlane', 'nce-getting-started', 'all', '', '', 9, 0, '',
       'G-55..G-25', 'S+5..S+38', '30..75', 'T-20..T-2', ''],
-    ['b2', 'uc1', 'copperlane', 'nce-admin-essentials', 'admins', '', 2, 0, '',
+    ['b2', 'uc1', 'copperlane', 'nce-admin-essentials', 'admins', '', '', 2, 0, '',
       'G-50..G-30', 'S+10..S+34', '35..60', 'T-18..T-4', ''],
-    ['b3', 'uc1', 'copperlane', 'nce-platform-setup', 'admins', '', 1, 0, '',
+    ['b3', 'uc1', 'copperlane', 'nce-platform-setup', 'admins', '', '', 1, 0, '',
       'G-45..G-25', 'S+18..S+36', '20..50', 'T-16..T-3', ''],
-    ['b4', 'uc1', 'copperlane', 'nce-launch-readiness', 'admins', '', 1, 0, '',
+    ['b4', 'uc1', 'copperlane', 'nce-launch-readiness', 'admins', '', '', 1, 0, '',
       'G-40..G-20', 'S+30..S+38', '', '',
       'Due dates sit early enough that slipping shows up as overdue, not just incomplete.'],
 
     // Vantage Ridge — 18 enrollments, 16 completed = 89%
-    ['c1', 'uc1', 'vantageridge', 'nce-getting-started', 'all', '', 8, 0, '',
+    ['c1', 'uc1', 'vantageridge', 'nce-getting-started', 'all', '', '', 8, 0, '',
       'G-45..G-25', 'S+3..S+20', '55..85', 'T-9..T-2', ''],
-    ['c2', 'uc1', 'vantageridge', 'nce-admin-essentials', 'admins', '', 3, 0, '',
+    ['c2', 'uc1', 'vantageridge', 'nce-admin-essentials', 'admins', '', '', 3, 0, '',
       'G-40..G-22', 'S+8..S+22', '', '', ''],
-    ['c3', 'uc1', 'vantageridge', 'nce-platform-setup', 'admins', '', 3, 0, '',
+    ['c3', 'uc1', 'vantageridge', 'nce-platform-setup', 'admins', '', '', 3, 0, '',
       'G-35..G-18', 'S+12..S+24', '', '', ''],
-    ['c4', 'uc1', 'vantageridge', 'nce-launch-readiness', 'admins', '', 2, 0, '',
+    ['c4', 'uc1', 'vantageridge', 'nce-launch-readiness', 'admins', '', '', 2, 0, '',
       'G-30..G-14', 'S+18..S+25', '60..80', 'T-8..T-3', 'One admin still working through it.']
   ];
 
@@ -196,7 +197,7 @@ function scenario1Enrollments_() {
     UC1_COURSE_KEYS.forEach((courseKey, i) => {
       const audience = i === 0 ? 'all' : 'admins';
       const count = i === 0 ? users : admins;
-      rows.push([key + (i + 1), 'uc1', key, courseKey, audience, '', count, 0, '',
+      rows.push([key + (i + 1), 'uc1', key, courseKey, audience, '', '', count, 0, '',
         'G-14..G-7', window, '', '',
         i === 0 ? 'Core training completed by day ' + coreDay + ' of onboarding.' : '']);
     });
