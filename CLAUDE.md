@@ -540,6 +540,12 @@ after a lost manifest, and it gives Layer 2 something exact to verify before an 
 differ between portals. Reading associations back shows two entries per pair — a numeric typeId and
 `Primary`. That is one association shown twice, not two companies. Verified.
 
+**4a. Enumeration `displayOrder` must be unique across the WHOLE option list.** Merging new options
+into an existing property fails with `400 Property option display orders must be unique` if the
+incoming options are numbered from 0, as options built from a sheet naturally are. Renumber the
+merged list end to end; do not trust either source's numbering. Also, `PATCH` with `options: []` is
+a silent no-op — it does not clear a dropdown.
+
 **4b. `POST /crm/v3/objects/{type}/batch/read` SILENTLY IGNORES an `associations` key.** It returns
 HTTP 200 with the properties and no associations at all, which made `Verify` report that all six
 seeded tickets were unattached when every one of them was correctly linked. This is HubSpot's
@@ -547,6 +553,12 @@ version of LearnUpon quirk 3, and it is worse here because it produced a *false 
 false pass — a check that cries wolf gets switched off, which is how a real failure gets through
 later. Associations must come from `POST /crm/v4/associations/{from}/{to}/batch/read`
 (`hsAssociationsFor_`).
+
+**4c. HubSpot dialogs must name the HubSpot portal.** Every confirmation printed
+`environmentLabel()`, which names the **LearnUpon** subdomain — so a HubSpot property write
+announced `PORTAL: DEMO (acmetraining.learnupon.com)`. The entire purpose of naming a portal in a
+confirmation is to stop a write going to the wrong place, and naming the wrong *system* defeats it.
+`hsPortalLabel_()` reports the real portal id and account type, cached once per execution.
 
 **5. Everything scenario 2 needs is settable and verified by read-back:** ticket `createdate`
 backdated to any day in a 90-day window, `ticket_category`, `hs_pipeline_stage` by label, priority,
@@ -599,6 +611,37 @@ check passed cleanly through both previous incidents because it asks the one que
 cannot reveal a missing record. `verifyHubSpot()` checks four things a green seed still gets wrong:
 the ticket landed, it is in the stage the scenario asked for, it is associated to a company at all
 (so "which account" is answerable), and its date is still inside its declared window.
+
+### Incident — the seeder leaked 18 tickets into a shared portal, 2026-08-10
+
+Building the HubSpot side left **18 duplicate tickets and 2 duplicate deals** in portal 23399533:
+three copies of every probe record. Found only because an unrelated 400 sent someone looking at the
+`ticket_category` options.
+
+**Cause.** Companies and contacts adopt before creating — by domain and by email. **Tickets and
+deals did not.** Their only de-duplication was the `_Manifest` diff, so anything not in the ledger
+was created again. The harness writes its ledger to a local JSON file, and that file was deleted
+between runs, so each run created a fresh set and orphaned the previous one.
+
+`demo_natural_key` was written onto every record *specifically* to make adoption possible after a
+lost manifest, and the comment above it says so. It was never wired up for these two object types.
+
+**Why it matters beyond the harness.** Scenario 2 has 217 tickets. Clear or lose `_Manifest` — a
+deleted tab, a bad Repair, a second workbook — re-run the phase, and the portal holds 434. Every
+number the demo quotes doubles, `Verify` reconciles plan → portal and finds all 217 it expects, and
+nothing anywhere says the word "duplicate".
+
+**Fix.** Both phases now index existing records by `demo_natural_key` and adopt. Verified by seeding,
+deleting the ledger outright, and re-running: `adopted 6 existing ticket(s) ... they were not
+duplicated`.
+
+**The generalisable rule, now true of every object type on both platforms:** *adopt before you
+create, on a key the portal itself carries.* The manifest is the authority for **deletion**. It must
+never be the only defence against **duplication**, because it is the thing most likely to be missing.
+
+**Second lesson, about tooling.** The probe workbook used invented category keys (`hsp-gap`), and
+`setupHubSpotProperties` merged them into the real shared `ticket_category` dropdown, where they
+stayed after the records were gone. Test fixtures that touch shared schema must use real values.
 
 ### HubSpot (v3/v4, Bearer)
 

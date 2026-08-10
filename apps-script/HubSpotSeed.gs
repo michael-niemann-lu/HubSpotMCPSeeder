@@ -66,7 +66,7 @@ function runHsPhase_(title, fn) {
     return;
   }
 
-  if (!confirmWrite_(title, work)) return;
+  if (!confirmWrite_(title, work, hsPortalLabel_())) return;
 
   return withLock(function () {
     const runId = newRunId();
@@ -80,7 +80,7 @@ function runHsPhase_(title, fn) {
     });
 
     uiAlert(title + ' — done',
-      'Portal:   ' + environmentLabel() + '\n' +
+      'Portal:   ' + hsPortalLabel_() + '\n' +
       'Scenario: ' + scopeLabel() + '\n\n' +
       'Created:  ' + result.succeeded + '\n' +
       'Failed:   ' + result.failed + '\n' +
@@ -347,7 +347,32 @@ const hsPhaseTickets_ = {
                  'Nothing was created — a ticket in the wrong stage tells the wrong story.']) };
     }
 
-    const toCreate = usable.map(t => {
+    // Adopt before creating. Companies and contacts already do this; tickets and deals did not,
+    // so a lost or cleared _Manifest meant every ticket was created a SECOND time. That is not
+    // hypothetical — building this leaked 18 tickets (3 copies of 6) exactly that way.
+    // demo_natural_key exists for precisely this, and 217 silently becoming 434 would double every
+    // number the demo quotes.
+    const existingTickets = hsIndexExisting_('tickets');
+    const adopted = [];
+    const toCreateRecs = [];
+    usable.forEach(t => {
+      const id = existingTickets.byKey[t.natural_key];
+      if (id) { adopted.push({ rec: t, id: id }); } else { toCreateRecs.push(t); }
+    });
+
+    adopted.forEach(a => {
+      manifestAppend(runId, [{ platform: 'hubspot', object_type: 'ticket', class: 'disposable',
+        external_id: a.id, natural_key: a.rec.natural_key, use_case: a.rec.use_case,
+        parent_external_id: manifestIdFor(index, 'hs:company:' + a.rec.account_key),
+        extra: a.rec.category_key }]);
+      succeeded++;
+    });
+    if (adopted.length) {
+      notes.push('adopted ' + adopted.length + ' existing ticket(s) already in the portal under ' +
+        'our natural key — they were not duplicated');
+    }
+
+    const toCreate = toCreateRecs.map(t => {
       const stage = stageIdByLabel[String(t.stage_label).trim().toLowerCase()];
 
       return {
@@ -450,9 +475,20 @@ const hsPhaseDeals_ = {
 
     // Same rule as tickets, and it matters more here: falling back to Sales Pipeline would put
     // nine onboarding deals worth half a million at "Appointment Scheduled" and report success.
+    const existingDeals = hsIndexExisting_('deals');
     const toCreate = [];
     const refusals = [];
     work.items.map(i => i.rec).forEach(d => {
+      const already = existingDeals.byKey[d.natural_key];
+      if (already) {
+        manifestAppend(runId, [{ platform: 'hubspot', object_type: 'deal', class: 'disposable',
+          external_id: already, natural_key: d.natural_key, use_case: d.use_case,
+          parent_external_id: manifestIdFor(index, 'hs:company:' + d.account_key),
+          extra: d.deal_type }]);
+        notes.push('adopted existing deal ' + d.name + ' (id ' + already + ')');
+        succeeded++;
+        return;
+      }
       const pipelineId = pipelines[hsNormalise_(d.pipeline_label)];
       if (!pipelineId) {
         refusals.push(d.name + ': pipeline "' + d.pipeline_label + '" does not exist in this ' +
@@ -542,7 +578,7 @@ function resetHubSpot() {
   rows.forEach(r => { byType[r.object_type] = (byType[r.object_type] || 0) + 1; });
 
   const ok = uiConfirmTyped('RESET ' + String(scope).toUpperCase(),
-    'PORTAL:   ' + environmentLabel() + '\n' +
+    'PORTAL:   ' + hsPortalLabel_() + '\n' +
     'SCENARIO: ' + scopeLabel() + '\n\n' +
     'About to ARCHIVE:\n' +
     Object.keys(byType).map(k => '  ' + byType[k] + ' ' + k + '(s)').join('\n') + '\n\n' +

@@ -31,6 +31,7 @@ let HS_LAST_CALL_AT = 0;
 function hsResetCounters() {
   HS_CALLS_MADE = 0;
   HS_LAST_CALL_AT = 0;
+  HS_PORTAL_LABEL = null;
 }
 
 /**
@@ -93,6 +94,31 @@ function hsRequest_(method, path, payload, opts) {
     throw new Error(method.toUpperCase() + ' ' + path + ' returned HTTP ' + code + '. ' + detail);
   }
   return { code: code, body: body, raw: text };
+}
+
+/**
+ * Which HubSpot portal we are actually pointed at.
+ *
+ * Every HubSpot dialog used to print environmentLabel(), which names the LEARNUPON portal — so
+ * "Create properties ... PORTAL: DEMO (acmetraining.learnupon.com)" appeared above a write that
+ * went nowhere near LearnUpon. The whole point of naming the portal in a confirmation is to stop
+ * someone writing to the wrong one, and naming the wrong system defeats it entirely.
+ *
+ * Cached per execution: one extra call per run, not one per dialog.
+ */
+let HS_PORTAL_LABEL = null;
+
+function hsPortalLabel_() {
+  if (HS_PORTAL_LABEL) return HS_PORTAL_LABEL;
+  try {
+    const b = (hsRequest_('get', '/account-info/v3/details').body) || {};
+    HS_PORTAL_LABEL = 'HubSpot ' + (b.portalId || '?') +
+      (b.accountType ? ' (' + b.accountType + ')' : '') +
+      '   [' + currentEnvironment() + ' credentials]';
+  } catch (e) {
+    HS_PORTAL_LABEL = 'HubSpot portal unknown — ' + String(e.message).slice(0, 80);
+  }
+  return HS_PORTAL_LABEL;
 }
 
 function hubspotToken_() {
@@ -177,7 +203,7 @@ function setupHubSpotProperties() {
   });
 
   const ok = ui.alert('Create / update HubSpot properties',
-    'PORTAL: ' + environmentLabel() + '\n\n' +
+    'PORTAL: ' + hsPortalLabel_() + '\n\n' +
     'This creates ' + plan.length + ' custom properties if they are missing, and updates the ' +
     'ticket_category dropdown to the ' + cats.length + ' categories on the TicketCategories tab.\n\n' +
     'Nothing is deleted. Existing properties keep their values.',
@@ -207,15 +233,24 @@ function setupHubSpotProperties() {
             external_id: p.name, natural_key: 'prop:' + type + ':' + p.name, use_case: 'all',
             extra: type }]);
         } else if (p.options && p.options.length) {
-          // Merge rather than replace: another scenario may have added a category we do not know.
+          // Merge rather than replace: another scenario may have added a category we do not know,
+          // and dropping an option strips its value off every record that carries it.
+          const current = (existing.body && existing.body.options) || [];
           const have = {};
-          ((existing.body && existing.body.options) || []).forEach(o => { have[o.value] = true; });
-          const merged = ((existing.body && existing.body.options) || []).concat(
-            p.options.filter(o => !have[o.value]));
-          if (merged.length !== ((existing.body && existing.body.options) || []).length) {
+          current.forEach(o => { have[o.value] = true; });
+          const additions = p.options.filter(o => !have[o.value]);
+
+          if (additions.length) {
+            // displayOrder must be unique across the WHOLE list. The incoming options are numbered
+            // from 0 by the sheet, which collides with whatever is already there, so renumber the
+            // merged list end to end rather than trusting either source's numbering.
+            const merged = current.concat(additions).map((o, i) => ({
+              label: o.label, value: o.value, displayOrder: i,
+              hidden: o.hidden === true, description: o.description || ''
+            }));
             hsRequest_('patch', '/crm/v3/properties/' + type + '/' + p.name, { options: merged });
-            updated.push(type + '.' + p.name + ' (+' +
-              (merged.length - existing.body.options.length) + ' options)');
+            updated.push(type + '.' + p.name + ' (+' + additions.length + ' option(s): ' +
+              additions.map(a => a.value).join(', ') + ')');
           }
         }
       } catch (e) {
@@ -224,7 +259,7 @@ function setupHubSpotProperties() {
     });
 
     uiAlert('HubSpot properties',
-      'PORTAL: ' + environmentLabel() + '\n\n' +
+      'PORTAL: ' + hsPortalLabel_() + '\n\n' +
       'Created: ' + (created.length ? '\n  ' + created.join('\n  ') : 'none (all present)') + '\n\n' +
       'Updated: ' + (updated.length ? '\n  ' + updated.join('\n  ') : 'none') + '\n\n' +
       (failed.length ? 'FAILED:\n  ' + failed.join('\n  ') : 'No errors.'));
@@ -270,7 +305,7 @@ function setupHubSpotPipelines() {
   const specs = hsPipelineSpecs_();
 
   const ok = ui.alert('Create / update HubSpot pipelines',
-    'PORTAL: ' + environmentLabel() + '\n\n' +
+    'PORTAL: ' + hsPortalLabel_() + '\n\n' +
     'This creates these pipelines if they are missing:\n' +
     specs.map(s => '  ' + s.label + ' (' + s.objectType + '): ' +
       s.stages.map(st => st.label).join(' -> ')).join('\n') + '\n\n' +
@@ -334,7 +369,7 @@ function setupHubSpotPipelines() {
     });
 
     uiAlert('HubSpot pipelines',
-      'PORTAL: ' + environmentLabel() + '\n\n' + lines.join('\n') +
+      'PORTAL: ' + hsPortalLabel_() + '\n\n' + lines.join('\n') +
       '\n\nRun Setup -> Show HubSpot Pipelines to see the full list with stage ids.');
   });
 }
@@ -408,7 +443,7 @@ function checkHubSpotPipelines() {
       });
       lines.push('');
     });
-    uiAlert('HubSpot pipelines', 'PORTAL: ' + environmentLabel() + '\n\n' + lines.join('\n'));
+    uiAlert('HubSpot pipelines', 'PORTAL: ' + hsPortalLabel_() + '\n\n' + lines.join('\n'));
   } catch (e) {
     uiAlert('HubSpot pipelines — FAILED', String(e.message).slice(0, 600));
   }

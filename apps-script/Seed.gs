@@ -85,10 +85,10 @@ function runPhase_(title, fn) {
 }
 
 /** Confirmation names the portal, because seeding ACME by reflex is the mistake to prevent. */
-function confirmWrite_(title, work) {
+function confirmWrite_(title, work, portalLabel) {
   const env = currentEnvironment();
   const message = title + '\n\n' +
-    'PORTAL:   ' + environmentLabel() + '\n' +
+    'PORTAL:   ' + (portalLabel || environmentLabel()) + '\n' +
     'SCENARIO: ' + scopeLabel() + '\n\n' +
     'About to create ' + work.items.length + ' ' + work.noun + '.\n' +
     (work.skipped ? work.skipped + ' already exist and will be skipped.\n' : '') +

@@ -121,7 +121,7 @@ function refreshHubSpotDates() {
   const sample = work.tickets.concat(work.deals).concat(work.companies).slice(0, 6);
   const ui = SpreadsheetApp.getUi();
   const ok = ui.alert('Refresh HubSpot dates',
-    'PORTAL:   ' + environmentLabel() + '\n' +
+    'PORTAL:   ' + hsPortalLabel_() + '\n' +
     'SCENARIO: ' + scopeLabel() + '\n' +
     'Anchor T: ' + plan.anchor + '\n\n' +
     'Move ' + total + ' record(s) to the dates the plan gives them today:\n' +
@@ -152,7 +152,7 @@ function refreshHubSpotDates() {
       succeeded: updated, failed: failed, notes: notes.slice(0, 3).join(' | ') });
 
     uiAlert('Refresh HubSpot dates — done',
-      'Portal:   ' + environmentLabel() + '\n' +
+      'Portal:   ' + hsPortalLabel_() + '\n' +
       'Scenario: ' + scopeLabel() + '\n\n' +
       'Updated: ' + updated + '\n' +
       'Failed:  ' + failed + '\n\n' +
@@ -199,7 +199,7 @@ function verifyHubSpot() {
   const seeded = planned.filter(t => index[t.natural_key]);
   const notSeeded = planned.length - seeded.length;
 
-  lines.push('Portal:   ' + environmentLabel());
+  lines.push('Portal:   ' + hsPortalLabel_());
   lines.push('Scenario: ' + scopeLabel() + '     anchor T: ' + plan.anchor);
   lines.push('');
   lines.push('Tickets in plan: ' + planned.length + '     in manifest: ' + seeded.length +

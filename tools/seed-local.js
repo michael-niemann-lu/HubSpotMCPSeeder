@@ -286,18 +286,18 @@ function tinyHubSpotWorkbook(evalIn, settings) {
   enrollments[0].not_started_count = 2;
 
   const cats = [
-    obj(TAB.TICKET_CATEGORIES, ['hsp-integrations-cat', 'HSP Integrations', 'hsp-integrations',
+    obj(TAB.TICKET_CATEGORIES, ['integrations', 'Integrations', 'hsp-integrations',
       false, 'API returning 401 after key rotation|Webhook not firing on completion', 'harness'], 0),
-    obj(TAB.TICKET_CATEGORIES, ['hsp-gap', 'HSP Data Import', '', true,
+    obj(TAB.TICKET_CATEGORIES, ['data-import', 'Data Import & Migration', '', true,
       'CSV import failing with no error message|Bulk upload times out', 'harness'], 1)
   ];
 
   const tickets = [
-    obj(TAB.TICKETS, ['t1', 'uc2', 'hsprobe', 'hsp-integrations-cat', 'T-180', 'T-91', 3,
+    obj(TAB.TICKETS, ['t1', 'uc2', 'hsprobe', 'integrations', 'T-180', 'T-91', 3,
       'hsp.ada,hsp.femi', 'MEDIUM', 'Closed', 10, 'harness'], 0),
-    obj(TAB.TICKETS, ['t2', 'uc2', 'hsprobe', 'hsp-integrations-cat', 'T-90', 'T-1', 1,
+    obj(TAB.TICKETS, ['t2', 'uc2', 'hsprobe', 'integrations', 'T-90', 'T-1', 1,
       'hsp.ada', 'MEDIUM', 'Closed', 10, 'harness'], 1),
-    obj(TAB.TICKETS, ['t3', 'uc2', 'hsprobe', 'hsp-gap', 'T-90', 'T-1', 2,
+    obj(TAB.TICKETS, ['t3', 'uc2', 'hsprobe', 'data-import', 'T-90', 'T-1', 2,
       'hsp.femi', 'HIGH', 'Waiting on us', 48, 'harness'], 2)
   ];
 
