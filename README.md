@@ -83,6 +83,7 @@ docs/
   getting-started.md       GitHub account, clone, first prompts — for a new scenario owner
   working-together.md      how the three owners share one workbook (start here if you are Nik or Brian)
   mcp-validation.md        how to test a seeded scenario against the MCP
+  scenario1-hubspot-recommendations.md   proposed uc1 HubSpot fixes, for Nik to review
   original-brief.md        superseded first draft, provenance only
 apps-script/               the files pasted into the editor
   Schema.gs                setupWorkbook, the tab/column contract, the README tab
@@ -103,6 +104,7 @@ apps-script/               the files pasted into the editor
   Refresh.gs               shift due dates (safe) and rebuild enrollments (destructive)
   HubSpot.gs               HubSpot client, custom properties, read-only checks
   HubSpotSeed.gs           HubSpot write phases and the archive path
+  HubSpotRefresh.gs        re-anchor HubSpot dates to today's T, and verify plan -> portal
   Menu.gs                  menu wiring and the per-scenario wrappers
   Version.gs               TOOLKIT_VERSION — bump it with any shared-file change
 tools/
@@ -124,12 +126,14 @@ tools load it themselves and print only status codes.
 ```
 MCP Demo Seeder
 ├─ Setup ▸ Create / Repair Workbook │ Credentials │ Check Custom Fields │ Check Course Source │ Find a Module
-│         Check HubSpot Connection │ Show HubSpot Pipelines │ Create / Update HubSpot Properties
+│         Check HubSpot Connection │ Show HubSpot Pipelines
+│         Create / Update HubSpot Properties │ Create / Update HubSpot Pipelines
 ├─ Scenario 1 — Customer Onboarding Health (Nik) ▸
 │    Load Sheet Data from Scenario1.gs
 │    Validate │ Preview (dry run)
 │    Refresh — add & update          <- the everyday action; idempotent, re-runnable
-│    Verify
+│    Refresh HubSpot dates          <- re-anchors tickets and deals to today's T
+│    Verify │ Verify HubSpot
 │    Seed step by step ▸ LearnUpon 1-4 │ HubSpot 5-7 │ Shift Due Dates only
 │    Rebuild Enrollments (moves completion dates)   <- destructive
 │    Reset — delete this scenario's enrollments      <- destructive
@@ -157,6 +161,10 @@ Measured, not assumed. Full detail in `CLAUDE.md`.
   no-ops. Every write is verified by reading it back.
 - **Users are never deleted** by this toolkit. Everything else can be removed. On the HubSpot side
   companies and contacts are equally persistent — Reset archives tickets and deals only.
+- **A name the portal does not recognise stops the phase.** Ticket stages and deal pipelines are
+  resolved against the portal and *refused* if unmatched, never defaulted. A ticket in the wrong
+  stage tells the opposite story, and a green dialog over a wrong dataset is this project's most
+  repeated failure.
 - **HubSpot fails a whole batch for one bad value.** An `industry` of "Logistics" (not one of its
   148 options) kills all 100 records in the call. Enum values are resolved against the portal
   before sending, and dropped with a note if they do not match.

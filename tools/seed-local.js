@@ -24,7 +24,7 @@ const { execFileSync } = require('child_process');
 const SRC = path.join(__dirname, '..', 'apps-script');
 const FILES = ['Schema.gs', 'Random.gs', 'Dates.gs', 'Expand.gs', 'Validate.gs', 'Scenario1.gs',
   'Manifest.gs', 'LearnUpon.gs', 'Seed.gs', 'Reset.gs', 'Refresh.gs',
-  'HubSpot.gs', 'HubSpotSeed.gs'];
+  'HubSpot.gs', 'HubSpotSeed.gs', 'HubSpotRefresh.gs'];
 const ENV_PATH = path.join(SRC, 'local', '.env');
 const STATE_PATH = path.join(SRC, 'local', 'seed-local-state.json');
 
@@ -242,7 +242,7 @@ settings.course_owner_id = '32088202';
 settings.t_anchor_mode = 'today';
 
 const MODE = process.argv[2] || 'seed';
-if (MODE === 'hubspot' || MODE === 'hubspot-reset') tinyHubSpotWorkbook(evalIn, settings);
+if (MODE.indexOf('hubspot') === 0) tinyHubSpotWorkbook(evalIn, settings);
 else tinyWorkbook(evalIn, settings);
 
 /**
@@ -333,6 +333,7 @@ if (MODE === 'hubspot') {
   evalIn('checkHubSpotCredentials()'); show('CHECK CONNECTION');
   evalIn('checkHubSpotPipelines()');   show('PIPELINES');
   evalIn('setupHubSpotProperties()');  show('PROPERTIES');
+  evalIn('setupHubSpotPipelines()');   show('PIPELINES — create Onboarding');
 
   evalIn('previewSeedPlan()');         show('PREVIEW');
 
@@ -341,12 +342,37 @@ if (MODE === 'hubspot') {
   evalIn('seedHubSpotDeals()');        show('PHASE 7 — deals');
   manifestTable();
 
+  evalIn('verifyHubSpot()');           show('VERIFY HUBSPOT');
+  evalIn('refreshHubSpotDates()');     show('REFRESH — must say nothing to do right after a seed');
+
   // Idempotency: a second run must create nothing.
   evalIn('seedHubSpotCompanies()');    show('PHASE 5 AGAIN — must say "nothing to do"');
   evalIn('seedHubSpotTickets()');      show('PHASE 6 AGAIN — must say "nothing to do"');
 
   fs.writeFileSync(STATE_PATH, JSON.stringify({ manifest: sheets._Manifest }, null, 2));
   console.log('\n  state written to ' + STATE_PATH + '  (run "hubspot-reset" to archive it all)');
+  console.log('\n  HTTP calls: ' + CALLS);
+  process.exit(0);
+}
+
+// Proves refresh MOVES dates, not just that it no-ops. Advancing T is exactly what the passage of
+// time does to a seeded dataset, so this simulates being N days downstream of the seed.
+if (MODE === 'hubspot-refresh') {
+  const days = Number(process.argv[3] || 45);
+  const state = fs.existsSync(STATE_PATH) ? JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')) : { manifest: [] };
+  sheets._Manifest = state.manifest || [];
+  const future = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  settings.t_anchor_mode = 'pinned';
+  settings.t_anchor_date = future;
+  console.log('Pretending it is ' + future + ' (' + days + ' days after the seed)');
+  console.log('Manifest rows: ' + sheets._Manifest.length);
+
+  evalIn('verifyHubSpot()');        show('VERIFY BEFORE — should complain the dates have drifted');
+  evalIn('refreshHubSpotDates()');  show('REFRESH');
+  evalIn('verifyHubSpot()');        show('VERIFY AFTER — should be clean');
+  evalIn('refreshHubSpotDates()');  show('REFRESH AGAIN — must be a no-op, not another shift');
+
+  fs.writeFileSync(STATE_PATH, JSON.stringify({ manifest: sheets._Manifest }, null, 2));
   console.log('\n  HTTP calls: ' + CALLS);
   process.exit(0);
 }

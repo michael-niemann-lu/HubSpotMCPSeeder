@@ -12,9 +12,9 @@
  * Scenario files do not need a bump — they only affect their own owner's data.
  */
 
-const TOOLKIT_VERSION = '1.1.0';
+const TOOLKIT_VERSION = '1.2.0';
 const TOOLKIT_VERSION_DATE = '2026-08-10';
-const TOOLKIT_VERSION_NOTE = 'HubSpot client and seed phases, scenario 2 data, enroll_count_override.';
+const TOOLKIT_VERSION_NOTE = 'HubSpot refresh and verify, pipeline creation, refuse-do-not-fall-back.';
 
 /** Developer -> About. Answers "is what I am running the same as what is in git?" */
 function showVersion() {

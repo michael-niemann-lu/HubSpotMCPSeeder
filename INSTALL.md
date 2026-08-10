@@ -37,8 +37,9 @@ means you can save and sanity-check as you go.
 | 13 | `Refresh` | `apps-script/Refresh.gs` |
 | 14 | `HubSpot` | `apps-script/HubSpot.gs` |
 | 15 | `HubSpotSeed` | `apps-script/HubSpotSeed.gs` |
-| 16 | `Version` | `apps-script/Version.gs` |
-| 17 | `Menu` | `apps-script/Menu.gs` |
+| 16 | `HubSpotRefresh` | `apps-script/HubSpotRefresh.gs` |
+| 17 | `Version` | `apps-script/Version.gs` |
+| 18 | `Menu` | `apps-script/Menu.gs` |
 
 Then **delete the starter `Code.gs`** (three-dot menu next to it → Remove). Its empty `myFunction`
 does nothing but it will clutter the run dropdown.

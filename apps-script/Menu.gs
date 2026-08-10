@@ -33,7 +33,8 @@ function onOpen() {
     .addSeparator()
     .addItem('Check HubSpot Connection', 'checkHubSpotCredentials')
     .addItem('Show HubSpot Pipelines', 'checkHubSpotPipelines')
-    .addItem('Create / Update HubSpot Properties', 'setupHubSpotProperties'));
+    .addItem('Create / Update HubSpot Properties', 'setupHubSpotProperties')
+    .addItem('Create / Update HubSpot Pipelines', 'setupHubSpotPipelines'));
 
   menu.addSeparator();
   menu.addSubMenu(scenarioMenu_(ui, 'uc1', '1'));
@@ -72,7 +73,9 @@ function scenarioMenu_(ui, useCase, n) {
     .addItem('Preview (dry run)', 'uc' + n + '_preview')
     .addSeparator()
     .addItem('Refresh — add & update', 'uc' + n + '_refresh')
+    .addItem('Refresh HubSpot dates', 'uc' + n + '_refreshHs')
     .addItem('Verify', 'uc' + n + '_verify')
+    .addItem('Verify HubSpot', 'uc' + n + '_verifyHs')
     .addSeparator()
     .addSubMenu(ui.createMenu('Seed step by step')
       .addItem('LearnUpon 1. Users, Groups, Memberships', 'uc' + n + '_seedUsers')
@@ -115,6 +118,8 @@ function uc1_seedHsCompanies() { withScope_('uc1', seedHubSpotCompanies); }
 function uc1_seedHsTickets() { withScope_('uc1', seedHubSpotTickets); }
 function uc1_seedHsDeals() { withScope_('uc1', seedHubSpotDeals); }
 function uc1_reset() { withScope_('uc1', resetEnrollments); }
+function uc1_refreshHs() { withScope_('uc1', refreshHubSpotDates); }
+function uc1_verifyHs() { withScope_('uc1', verifyHubSpot); }
 function uc1_resetHs() { withScope_('uc1', resetHubSpot); }
 
 function uc2_load() { runScenarioLoader_('uc2'); }
@@ -132,6 +137,8 @@ function uc2_seedHsCompanies() { withScope_('uc2', seedHubSpotCompanies); }
 function uc2_seedHsTickets() { withScope_('uc2', seedHubSpotTickets); }
 function uc2_seedHsDeals() { withScope_('uc2', seedHubSpotDeals); }
 function uc2_reset() { withScope_('uc2', resetEnrollments); }
+function uc2_refreshHs() { withScope_('uc2', refreshHubSpotDates); }
+function uc2_verifyHs() { withScope_('uc2', verifyHubSpot); }
 function uc2_resetHs() { withScope_('uc2', resetHubSpot); }
 
 function uc3_load() { runScenarioLoader_('uc3'); }
@@ -149,4 +156,6 @@ function uc3_seedHsCompanies() { withScope_('uc3', seedHubSpotCompanies); }
 function uc3_seedHsTickets() { withScope_('uc3', seedHubSpotTickets); }
 function uc3_seedHsDeals() { withScope_('uc3', seedHubSpotDeals); }
 function uc3_reset() { withScope_('uc3', resetEnrollments); }
+function uc3_refreshHs() { withScope_('uc3', refreshHubSpotDates); }
+function uc3_verifyHs() { withScope_('uc3', verifyHubSpot); }
 function uc3_resetHs() { withScope_('uc3', resetHubSpot); }

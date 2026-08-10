@@ -232,6 +232,114 @@ function setupHubSpotProperties() {
 }
 
 // ---------------------------------------------------------------------------
+// Pipelines
+// ---------------------------------------------------------------------------
+
+/**
+ * Pipelines this toolkit needs but a fresh portal does not have.
+ *
+ * Deal stages are ORDERED, and the order is the story: a deal sitting at "Data Migration" three
+ * weeks before go-live means something specific. Deriving the order from the Deals tab would give
+ * account order, not pipeline order, so it lives here as code.
+ *
+ * Only the deal pipeline is created. Tickets already have a Support Pipeline with sensible stages,
+ * and inventing a second one would split ticket reporting across two pipelines for no gain.
+ */
+function hsPipelineSpecs_() {
+  return [{
+    objectType: 'deals',
+    label: 'Onboarding',
+    stages: [
+      { label: 'Kickoff', probability: '0.2' },
+      { label: 'Data Migration', probability: '0.4' },
+      { label: 'Training & Enablement', probability: '0.6' },
+      { label: 'UAT', probability: '0.8' },
+      { label: 'Go-Live', probability: '1.0', closed: true }
+    ]
+  }];
+}
+
+/**
+ * Creates missing pipelines and adds missing stages to ones that exist.
+ *
+ * Never removes a stage or a pipeline. Deals live on stages, and deleting one would move other
+ * people's records somewhere arbitrary.
+ */
+function setupHubSpotPipelines() {
+  const ui = SpreadsheetApp.getUi();
+  const specs = hsPipelineSpecs_();
+
+  const ok = ui.alert('Create / update HubSpot pipelines',
+    'PORTAL: ' + environmentLabel() + '\n\n' +
+    'This creates these pipelines if they are missing:\n' +
+    specs.map(s => '  ' + s.label + ' (' + s.objectType + '): ' +
+      s.stages.map(st => st.label).join(' -> ')).join('\n') + '\n\n' +
+    'Nothing is renamed or deleted. Existing pipelines only gain missing stages.',
+    ui.ButtonSet.OK_CANCEL);
+  if (ok !== ui.Button.OK) return;
+
+  hsResetCounters();
+  return withLock(function () {
+    const runId = newRunId();
+    const lines = [];
+
+    specs.forEach(spec => {
+      try {
+        const res = hsRequest_('get', '/crm/v3/pipelines/' + spec.objectType);
+        const existing = ((res.body && res.body.results) || [])
+          .filter(p => hsNormalise_(p.label) === hsNormalise_(spec.label))[0];
+
+        const stagePayload = spec.stages.map((st, i) => ({
+          label: st.label,
+          displayOrder: i,
+          metadata: spec.objectType === 'deals'
+            ? { isClosed: st.closed ? 'true' : 'false', probability: st.probability }
+            : { ticketState: st.closed ? 'CLOSED' : 'OPEN' }
+        }));
+
+        if (!existing) {
+          const made = hsRequest_('post', '/crm/v3/pipelines/' + spec.objectType,
+            { label: spec.label, displayOrder: 99, stages: stagePayload });
+          const id = made.body && made.body.id;
+          lines.push('CREATED  ' + spec.label + ' (' + spec.objectType + ')  id ' + id);
+          ((made.body && made.body.stages) || []).forEach(st =>
+            lines.push('           ' + st.label + '  id ' + st.id));
+          manifestAppend(runId, [{ platform: 'hubspot', object_type: 'pipeline', class: 'schema',
+            external_id: String(id), natural_key: 'pipeline:' + spec.objectType + ':' + spec.label,
+            use_case: 'all', extra: spec.objectType }]);
+          return;
+        }
+
+        // Exists — add only the stages it is missing, keeping everyone else's stages untouched.
+        const have = {};
+        (existing.stages || []).forEach(st => { have[hsNormalise_(st.label)] = st; });
+        const missing = spec.stages.filter(st => !have[hsNormalise_(st.label)]);
+        if (!missing.length) {
+          lines.push('OK       ' + spec.label + ' already has all ' + spec.stages.length + ' stages');
+          return;
+        }
+        missing.forEach((st, i) => {
+          hsRequest_('post', '/crm/v3/pipelines/' + spec.objectType + '/' + existing.id + '/stages', {
+            label: st.label,
+            displayOrder: (existing.stages || []).length + i,
+            metadata: spec.objectType === 'deals'
+              ? { isClosed: st.closed ? 'true' : 'false', probability: st.probability }
+              : { ticketState: st.closed ? 'CLOSED' : 'OPEN' }
+          });
+        });
+        lines.push('UPDATED  ' + spec.label + '  added: ' + missing.map(m => m.label).join(', '));
+      } catch (e) {
+        lines.push('FAILED   ' + spec.label + ': ' + String(e.message).slice(0, 200));
+      }
+    });
+
+    uiAlert('HubSpot pipelines',
+      'PORTAL: ' + environmentLabel() + '\n\n' + lines.join('\n') +
+      '\n\nRun Setup -> Show HubSpot Pipelines to see the full list with stage ids.');
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Read-only checks
 // ---------------------------------------------------------------------------
 
@@ -477,6 +585,28 @@ function hsEnumValue_(type, property, label) {
 
 function hsNormalise_(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * Reads associations for a batch of records: returns { fromId: [toId, ...] }.
+ *
+ * This exists because the v3 batch/read endpoint SILENTLY IGNORES an `associations` key and returns
+ * HTTP 200 with no associations at all — the same hazard as LearnUpon's ignored query parameters,
+ * and it made Verify report that every ticket was unattached when all of them were fine. A check
+ * that cries wolf gets switched off, so it has to use the endpoint that actually answers.
+ */
+function hsAssociationsFor_(fromType, toType, ids) {
+  const out = {};
+  hsChunk_(ids).forEach(chunk => {
+    const res = hsRequest_('post',
+      '/crm/v4/associations/' + fromType + '/' + toType + '/batch/read',
+      { inputs: chunk.map(id => ({ id: String(id) })) }, { raw: true });
+    (((res.body || {}).results) || []).forEach(r => {
+      const from = String(r.from && r.from.id);
+      out[from] = (r.to || []).map(t => String(t.toObjectId));
+    });
+  });
+  return out;
 }
 
 /**

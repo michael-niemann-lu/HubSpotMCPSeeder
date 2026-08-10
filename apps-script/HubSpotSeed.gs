@@ -303,6 +303,7 @@ const hsPhaseTickets_ = {
     // scenario file names stages in words and this turns them into ids.
     let pipelineId = null;
     const stageIdByLabel = {};
+    const ticketStageLabels = [];
     try {
       const res = hsRequest_('get', '/crm/v3/pipelines/tickets');
       const pipes = (res.body && res.body.results) || [];
@@ -311,6 +312,7 @@ const hsPhaseTickets_ = {
         pipelineId = support.id;
         (support.stages || []).forEach(s => {
           stageIdByLabel[String(s.label).trim().toLowerCase()] = s.id;
+          ticketStageLabels.push(s.label);
         });
       }
     } catch (e) {
@@ -321,14 +323,32 @@ const hsPhaseTickets_ = {
         notes: ['No ticket pipeline found. Run Setup -> HubSpot Pipelines to see what exists.'] };
     }
 
-    const defaultStage = stageIdByLabel['closed'] ||
-      stageIdByLabel[Object.keys(stageIdByLabel)[0]];
-    const unknownStages = {};
-
-    const toCreate = work.items.map(i => i.rec).map(t => {
+    // A stage we cannot resolve is REFUSED, not defaulted. Silently filing every "open" ticket as
+    // Closed reads as success and produces the opposite of the intended story — exactly the shape
+    // of failure this project has shipped twice before.
+    const known = ticketStageLabels;
+    const unresolved = {};
+    const usable = [];
+    work.items.map(i => i.rec).forEach(t => {
       const wanted = String(t.stage_label || '').trim().toLowerCase();
-      const stage = stageIdByLabel[wanted] || defaultStage;
-      if (wanted && !stageIdByLabel[wanted]) unknownStages[t.stage_label] = true;
+      if (!wanted || !stageIdByLabel[wanted]) {
+        unresolved[t.stage_label || '(blank)'] = (unresolved[t.stage_label || '(blank)'] || 0) + 1;
+        return;
+      }
+      usable.push(t);
+    });
+
+    if (Object.keys(unresolved).length) {
+      return { succeeded: 0, failed: work.items.length, associated: 0, notes:
+        ['REFUSED — these Tickets.status values are not stages in this pipeline:']
+        .concat(Object.keys(unresolved).map(k => '    "' + k + '"  (' + unresolved[k] + ' ticket(s))'))
+        .concat(['Valid stages are: ' + known.join(', '),
+                 'Fix Tickets.status in the scenario file, then run this phase again.',
+                 'Nothing was created — a ticket in the wrong stage tells the wrong story.']) };
+    }
+
+    const toCreate = usable.map(t => {
+      const stage = stageIdByLabel[String(t.stage_label).trim().toLowerCase()];
 
       return {
         natural_key: t.natural_key, rec: t,
@@ -345,10 +365,6 @@ const hsPhaseTickets_ = {
           createdate: new Date(t.created_at).toISOString()
         }, hsTag_(t)))
       };
-    });
-
-    Object.keys(unknownStages).forEach(label => {
-      notes.push('stage "' + label + '" is not in this pipeline — used the default instead');
     });
 
     const res = hsBatchCreate_('tickets', toCreate);
@@ -417,43 +433,58 @@ const hsPhaseDeals_ = {
 
     const pipelines = {};
     const stagesByPipeline = {};
+    const stageLabels = {};      // readable labels for the refusal message
+    const pipelineLabels = [];
     try {
       const res = hsRequest_('get', '/crm/v3/pipelines/deals');
       ((res.body && res.body.results) || []).forEach(p => {
-        pipelines[String(p.label).trim().toLowerCase()] = p.id;
+        pipelines[hsNormalise_(p.label)] = p.id;
+        pipelineLabels.push(p.label);
         const m = stagesByPipeline[p.id] = {};
-        (p.stages || []).forEach(s => { m[String(s.label).trim().toLowerCase()] = s.id; });
+        stageLabels[p.id] = (p.stages || []).map(s => s.label);
+        (p.stages || []).forEach(s => { m[hsNormalise_(s.label)] = s.id; });
       });
     } catch (e) {
       notes.push('could not read deal pipelines: ' + String(e.message).slice(0, 160));
     }
 
+    // Same rule as tickets, and it matters more here: falling back to Sales Pipeline would put
+    // nine onboarding deals worth half a million at "Appointment Scheduled" and report success.
     const toCreate = [];
+    const refusals = [];
     work.items.map(i => i.rec).forEach(d => {
-      const pipelineId = pipelines[String(d.pipeline_label).trim().toLowerCase()] ||
-        pipelines['sales pipeline'] || Object.keys(pipelines).map(k => pipelines[k])[0];
+      const pipelineId = pipelines[hsNormalise_(d.pipeline_label)];
       if (!pipelineId) {
-        notes.push(d.name + ': no deal pipeline found');
-        failed++;
+        refusals.push(d.name + ': pipeline "' + d.pipeline_label + '" does not exist in this ' +
+          'portal. Pipelines here: ' + pipelineLabels.join(', '));
         return;
       }
       const stages = stagesByPipeline[pipelineId] || {};
-      const stageId = stages[String(d.stage_label).trim().toLowerCase()];
+      const stageId = stages[hsNormalise_(d.stage_label)];
       if (!stageId) {
-        notes.push(d.name + ': stage "' + d.stage_label + '" not in that pipeline — using the first');
+        refusals.push(d.name + ': stage "' + d.stage_label + '" is not in the ' + d.pipeline_label +
+          ' pipeline. Valid stages: ' + (stageLabels[pipelineId] || []).join(', '));
+        return;
       }
       toCreate.push({
         natural_key: d.natural_key, rec: d,
         properties: hsProps_(Object.assign({
           dealname: d.name,
           pipeline: String(pipelineId),
-          dealstage: String(stageId || stages[Object.keys(stages)[0]]),
+          dealstage: String(stageId),
           amount: d.amount === null ? null : String(d.amount),
           closedate: hsDate_(d.close_date),
           dealtype: d.deal_type === 'renewal' ? 'existingbusiness' : 'newbusiness'
         }, hsTag_(d)))
       });
     });
+
+    if (refusals.length) {
+      return { succeeded: 0, failed: work.items.length, associated: 0, notes:
+        ['REFUSED — nothing was created:'].concat(refusals.map(r => '    ' + r))
+        .concat(['Run Setup -> Create / Update HubSpot Pipelines to create the Onboarding pipeline,',
+                 'or correct pipeline/stage in the scenario file. Then run this phase again.']) };
+    }
 
     const res = hsBatchCreate_('deals', toCreate);
     const pairs = [];

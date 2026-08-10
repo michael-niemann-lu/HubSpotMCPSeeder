@@ -540,6 +540,14 @@ after a lost manifest, and it gives Layer 2 something exact to verify before an 
 differ between portals. Reading associations back shows two entries per pair — a numeric typeId and
 `Primary`. That is one association shown twice, not two companies. Verified.
 
+**4b. `POST /crm/v3/objects/{type}/batch/read` SILENTLY IGNORES an `associations` key.** It returns
+HTTP 200 with the properties and no associations at all, which made `Verify` report that all six
+seeded tickets were unattached when every one of them was correctly linked. This is HubSpot's
+version of LearnUpon quirk 3, and it is worse here because it produced a *false alarm* rather than a
+false pass — a check that cries wolf gets switched off, which is how a real failure gets through
+later. Associations must come from `POST /crm/v4/associations/{from}/{to}/batch/read`
+(`hsAssociationsFor_`).
+
 **5. Everything scenario 2 needs is settable and verified by read-back:** ticket `createdate`
 backdated to any day in a 90-day window, `ticket_category`, `hs_pipeline_stage` by label, priority,
 company date properties, deal `closedate` and `amount`. Pipeline and stage IDs are resolved from
@@ -549,6 +557,48 @@ labels at seed time, so a scenario file names stages in words.
 else. Reset refused both — `no demo_source tag — not ours, refusing to archive` — and left the
 ledger rows in place, because a refused delete must not clear the manifest. That is the safety
 model working on the one case that matters.
+
+### Refuse, do not fall back — 2026-08-10
+
+Two places resolved a name against the portal and quietly substituted a default when it did not
+match. Both have been changed to refuse the whole phase and name the valid options.
+
+| Was | Would have happened |
+|---|---|
+| Ticket stage falls back to `Closed` | uc1 says `open`, which matches no stage. All 12 tickets filed as Closed, reported `Created: 12, Failed: 0` |
+| Deal pipeline falls back to Sales Pipeline | uc1's nine deals name `Onboarding`, which did not exist. $558k of pipeline at "Appointment Scheduled", reported as success |
+
+This is the same failure shape as the completions incident and the stray-enrollment incident: a
+green dialog over a wrong dataset. The rule now is that **a name the portal does not recognise stops
+the phase**, because a demo built on a silently substituted default is worse than one that did not
+seed. Verified by deliberately breaking both and confirming nothing was created.
+
+**The Onboarding deal pipeline was created** in portal 23399533 on 2026-08-10 (id `924734831`):
+Kickoff → Data Migration → Training & Enablement → UAT → Go-Live. `setupHubSpotPipelines()` creates
+missing pipelines and adds missing stages, and never renames or deletes — deals live on stages, so
+removing one would move other people's records somewhere arbitrary.
+
+### Refresh and Verify on the HubSpot side — 2026-08-10
+
+**Refresh re-anchors, it does not shift.** `refreshHubSpotDates()` re-expands the plan against
+today's `T` and writes each record to the date the plan gives it, rather than adding N days to what
+is there. Two consequences that a blind shift would not have: running it twice is a no-op instead of
+pushing everything 2N days out, and HubSpot stays consistent with the LearnUpon side automatically.
+Jitter is keyed on the natural key, which does not change, so a ticket keeps its position inside its
+window instead of jumping about on every refresh.
+
+This matters most for scenario 2, whose entire story is "last 90 days versus the 90 before". A
+ticket seeded at T-88 slides out of the recent window within a week and the 38 → 13 collapse
+flattens on its own, with nothing to signal it.
+
+Verified end to end by advancing `T` 45 days: Verify flagged the drift and named the records,
+Refresh moved all 8, Verify came back clean, and a second Refresh reported nothing to do.
+
+**Verify reconciles plan → portal**, the direction that can find something. The manifest → portal
+check passed cleanly through both previous incidents because it asks the one question whose answer
+cannot reveal a missing record. `verifyHubSpot()` checks four things a green seed still gets wrong:
+the ticket landed, it is in the stage the scenario asked for, it is associated to a company at all
+(so "which account" is answerable), and its date is still inside its declared window.
 
 ### HubSpot (v3/v4, Bearer)
 
