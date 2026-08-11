@@ -1049,6 +1049,21 @@ summary verbatim can report zero rows; `due_date_passed` returns the strings `"y
 `"no_string"` rather than booleans; course names carry a ` v.1` version suffix; dates come back
 `MM/DD/YYYY`.
 
+## A guard that failed silently — 2026-08-10
+
+`uiConfirmTyped` returned `false` with **no dialog** when the typed text did not match. Every write
+phase against the demo portal needs `SEED DEMO` typed exactly, so one trailing space made a phase
+disappear without a word. The operator reasonably concluded it had run, moved on to the next phase,
+and hit a blocking error two steps later that named a completely different cause.
+
+Cancelling stays silent — that is a deliberate choice and needs no explanation. A **mismatch** now
+says so explicitly, states that nothing was created or deleted, and tells you what to type. Matching
+is case- and space-insensitive: the safety is in typing the words deliberately, not the capitals.
+
+**The general rule this belongs to:** a safety check that declines to act must say it declined.
+Silence is read as success, and every hour of the resulting confusion is spent looking somewhere
+else. This is the same failure as counting an empty draft course as created, one layer up.
+
 ## Reporting quirk that produced a false all-clear — 2026-08-10
 
 **`is_preview: true` on the MCP progress report silently caps the result set, and the SUMMARY

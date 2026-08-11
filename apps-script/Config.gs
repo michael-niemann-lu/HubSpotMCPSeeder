@@ -343,9 +343,28 @@ function uiAlert(title, message) {
 }
 
 /** Destructive actions require the user to type an exact word. */
+/**
+ * Typed confirmation for anything writing to the demo portal or deleting.
+ *
+ * Cancelling is deliberate and stays silent. A MISMATCH does not: it used to return false with no
+ * dialog at all, which is indistinguishable from "the phase ran and did nothing" — someone typed
+ * SEED DEMO with a trailing space, got no message, reasonably concluded the phase had completed,
+ * and moved on to the next one. The friction is meant to make you think, not to fail invisibly.
+ *
+ * Matching ignores case and surrounding space. The safety is in typing the words deliberately, not
+ * in reproducing the capitals.
+ */
 function uiConfirmTyped(word, message) {
   const ui = SpreadsheetApp.getUi();
   const res = ui.prompt('Confirm', message + '\n\nType ' + word + ' to proceed.', ui.ButtonSet.OK_CANCEL);
-  if (res.getSelectedButton() !== ui.Button.OK) return false;
-  return res.getResponseText().trim() === word;
+  if (res.getSelectedButton() !== ui.Button.OK) return false;   // cancelling needs no explanation
+
+  const typed = String(res.getResponseText() || '').trim();
+  if (typed.toUpperCase() === String(word).trim().toUpperCase()) return true;
+
+  uiAlert('Nothing happened',
+    'You typed "' + typed + '".\n' +
+    'This action needs exactly:  ' + word + '\n\n' +
+    'NOTHING WAS CREATED, CHANGED OR DELETED. Run the same menu item again and type it exactly.');
+  return false;
 }
