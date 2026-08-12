@@ -12,9 +12,9 @@
  * Scenario files do not need a bump — they only affect their own owner's data.
  */
 
-const TOOLKIT_VERSION = '1.3.1';
-const TOOLKIT_VERSION_DATE = '2026-08-10';
-const TOOLKIT_VERSION_NOTE = 'Typed confirmation says so when it declines instead of failing silently.';
+const TOOLKIT_VERSION = '1.3.2';
+const TOOLKIT_VERSION_DATE = '2026-08-12';
+const TOOLKIT_VERSION_NOTE = 'Enrollments enroll_count-exceeded message says "users", not "all", for the all-audience case.';
 
 /** Developer -> About. Answers "is what I am running the same as what is in git?" */
 function showVersion() {
