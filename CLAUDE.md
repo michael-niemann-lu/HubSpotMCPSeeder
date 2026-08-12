@@ -1064,6 +1064,34 @@ is case- and space-insensitive: the safety is in typing the words deliberately, 
 Silence is read as success, and every hour of the resulting confusion is spent looking somewhere
 else. This is the same failure as counting an empty draft course as created, one layer up.
 
+## The MCP reads a different field than the one we seed — 2026-08-10
+
+Scenario 2's categories are written to our custom `ticket_category`. HubSpot also ships a built-in
+**`hs_ticket_category`**, and that is the one in the MCP connector's DEFAULT property set for
+tickets. On all 217 seeded tickets the built-in is **empty**.
+
+So a demo question like "what are our top ticket categories?" fetches default properties, reads
+`hs_ticket_category`, finds nothing, and answers that categories are unset — while 217 correctly
+categorised tickets sit right there. The records are present and the API returns them; the assistant
+is simply looking at the wrong field, and the two fields differ by a three-character prefix.
+
+Verified: `demo_source = MCP-DEMO` returns 217 tickets; every one has `ticket_category` populated
+and `hs_ticket_category` empty. Rate limits were not involved — the portal showed 999,999 of
+1,000,000 daily calls remaining.
+
+Two ways out, and they are not exclusive:
+1. **Pin the property in the prompt** — "group by the `ticket_category` property". Same discipline
+   as pinning report columns on the LearnUpon side, and it costs nothing.
+2. **Populate `hs_ticket_category` as well.** Its `modificationMetadata` reports
+   `readOnlyDefinition: false`, so our six values can be added to its option list and written to
+   every ticket. That makes the naive question work. The cost is editing a HubSpot-defined property
+   in a shared portal.
+
+**The general rule:** seeding a value into a custom property does not make an assistant find it. Any
+field a demo question depends on must either be in the object's default property set or be named
+explicitly in the prompt. This is the HubSpot-side twin of `created_at` betraying the backdating —
+what the reporting layer *volunteers* is not what we chose to write.
+
 ## Reporting quirk that produced a false all-clear — 2026-08-10
 
 **`is_preview: true` on the MCP progress report silently caps the result set, and the SUMMARY
