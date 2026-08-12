@@ -17,7 +17,22 @@
  *
  * Company names, domains and course titles must not collide with uc1 or uc2 — they are global in a
  * shared portal, and validation will refuse duplicates with an explanation.
+ *
+ * PLACEHOLDER DATA — added to exercise the workflow (edit-then-verify), not yet the real narrative.
+ * One account, Larkfield Manufacturing: an Enterprise-tier feature course completed by a handful of
+ * people at a Growth-tier account, with a renewal deal approaching. Replace with the real dataset
+ * before seeding anything live.
  */
+
+const UC3_CSM_OWNER = 'brian.mchugh@learnupon.com';
+
+/**
+ * Module donor for created courses. Reuses the module id verified against the sandbox in the
+ * scenario 1 spike (CLAUDE.md, spike 4). MODULE IDS ARE PORTAL-SPECIFIC — check with
+ * Setup -> Find a Module before seeding a real portal; Settings.default_source_module_id is the
+ * fallback when this id doesn't exist there.
+ */
+const UC3_SOURCE_MODULE = 7788730;
 
 function scenario3Meta() {
   return {
@@ -33,11 +48,7 @@ function scenario3Meta() {
 function scenario3Expected() {
   return {
     accounts: {
-      // northwind:  { completion: 28, note: 'top target — high tickets, low training' },
-      // larkspur:   { completion: 41 },
-      // halden:     { completion: 35 },
-      // fernpath:   { completion: 86, note: 'the proof account' },
-      // cobaltpeak: { completion: 92, note: 'contrast — fully trained, quiet' }
+      larkfield: { completion: 25, note: 'placeholder demo account, renewal approaching in ~75 days' }
     },
     notes: [
       'Accounts renewing in the next 90 days with learners in out-of-plan courses'
@@ -65,16 +76,22 @@ function scenario3Accounts_() {
   // onboarding_start_offset, target_go_live_offset, actual_go_live_offset, user_count, admin_count,
   // required_complete_target, [required_complete_actual ƒ], csm_owner_email, [lu_group_title ƒ], notes
   return [
-    // ['northwind2', 'uc3', 'Northwind Logistics', 'northwindlogistics.com', 'Logistics',
-    //   'established', 'Growth', 42000, 'T-400', 'S+60', 'S+60', 14, 3, 28, '', UC3_CSM_OWNER, '',
-    //   'Top target: highest ticket volume, lowest training engagement.'],
+    ['larkfield', 'uc3', 'Larkfield Manufacturing', 'larkfieldmfg.com', 'Manufacturing',
+      'established', 'Growth', 54000, 'T-400', 'S+60', 'S+60', 20, 4, 25, '', UC3_CSM_OWNER, '',
+      'Placeholder demo account. Growth-tier, renewal approaching, learners completing an ' +
+      'Enterprise-tier course — the upsell signal.'],
   ];
 }
 
 function scenario3People_() {
   // person_key, use_case, first_name, last_name, [email ƒ], job_title, is_admin, account_key, notes
   // Story 3 recommends named people to enrol, so each account needs at least three with real titles.
-  return [];
+  return [
+    ['larkfield.priya', 'uc3', 'Priya', 'Chandran', '', 'IT Systems Manager', true, 'larkfield', ''],
+    ['larkfield.owen', 'uc3', 'Owen', 'Delacroix', '', 'Platform Administrator', true, 'larkfield', ''],
+    ['larkfield.maya', 'uc3', 'Maya', 'Whitfield', '', 'Operations Lead', false, 'larkfield',
+      'Completed the Enterprise-tier course despite being on the Growth plan.'],
+  ];
 }
 
 function scenario3Courses_() {
@@ -82,7 +99,11 @@ function scenario3Courses_() {
   //
   // NEVER create a course for a deliberate gap category. Story 1 collapses if you do, and
   // validation blocks it.
-  return [];
+  return [
+    ['ent-workflow-automation', 'uc3', 'Advanced Workflow Automation', '', UC3_SOURCE_MODULE,
+      'An Enterprise-tier feature course. Completions here from a Growth-tier account are the ' +
+      'expansion signal Story 3 is built on.'],
+  ];
 }
 
 function scenario3Enrollments_() {
@@ -92,7 +113,11 @@ function scenario3Enrollments_() {
   //
   // The date chain is the whole scenario: course launch -> completion wave -> ticket decline, in
   // that order with visible spacing. complete_offset carries it; "assigned date" is not settable.
-  return [];
+  return [
+    ['e1', 'uc3', 'larkfield', 'ent-workflow-automation', 'all', '', '', 5, 0, '',
+      'T-30..T-5', 'T-90..T-20', '', '',
+      '5 of 20 completed = 25%, matching required_complete_target.'],
+  ];
 }
 
 function scenario3PersonaStates_() {
@@ -123,5 +148,8 @@ function scenario3Tickets_() {
 function scenario3Deals_() {
   // row_id, use_case, account_key, pipeline, stage, amount, close_offset, deal_type, notes
   // One renewal deal on the top target, closing around T+75, escalates the Story 3 ask.
-  return [];
+  return [
+    ['d01', 'uc3', 'larkfield', 'Renewals', 'Negotiation', 54000, 'T+75', 'renewal',
+      'Renewal approaching while out-of-plan usage signals an upsell opportunity.'],
+  ];
 }
