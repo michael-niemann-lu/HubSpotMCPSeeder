@@ -290,10 +290,11 @@ function validateEnrollments_(wb, accountByKey, courseByKey, err, warn) {
       err(TAB.ENROLLMENTS, r, 'completed_count',
         'completed (' + done + ') + in_progress (' + wip + ') exceeds enroll_count (' + total + ').');
     }
-    const audienceCap = num_(String(row.audience).trim() === 'admins' ? acct.admin_count : acct.user_count, 0);
+    const isAdminsAudience = String(row.audience).trim() === 'admins';
+    const audienceCap = num_(isAdminsAudience ? acct.admin_count : acct.user_count, 0);
     if (total !== null && total > audienceCap) {
       err(TAB.ENROLLMENTS, r, 'enroll_count', 'Wants ' + total + ' but the account only has ' +
-        audienceCap + ' ' + row.audience + '.');
+        audienceCap + ' ' + (isAdminsAudience ? 'admins' : 'users') + '.');
     }
 
     let ctx = null;
