@@ -44,8 +44,9 @@
  *       brightwell   6 of 10 certified   Expansion deal at Proposal Sent (further along than praxis's)
  *       nettlecombe  4 of 8  certified   NO deal   — modest, deliberately borderline
  *     3 of 5 have no deal at all despite the signal — that imbalance IS the story. None of these five
- *     renew soon (all 100+ days out — each now has its own real Renewals deal, so that fact is
- *     backed by data, not just a comment), so they never enter Group A's 60-day pool — expansion and
+ *     renew soon (all 100+ days out — each now has its own real renewal-type deal on the Sales
+ *     Pipeline, so that fact is backed by data, not just a comment), so they never enter Group A's
+ *     60-day pool — expansion and
  *     renewal risk stay legible as separate signals even though they share one sheet.
  *
  *     NOTE on calloway specifically: it is already Enterprise-tier — the top tier — so its opportunity
@@ -211,7 +212,7 @@ function scenario3Accounts_() {
       'Largest certified cohort in the scenario (22 of 30 seats, last 30 days), plus one ' +
       'Elite-certified sponsor, and NO expansion deal exists — the single biggest missed opportunity ' +
       'in the dataset. Already Enterprise-tier (the top tier), so the pitch is licenses-only, not a ' +
-      'tier upgrade. Renews in 150 days, well outside Group A\'s window (backed by its own Renewals deal).'],
+      'tier upgrade. Renews in 150 days, well outside Group A\'s window (backed by its own renewal-type deal).'],
     ['praxis', 'uc3', 'Praxis Robotics', 'praxisrobotics.com', 'Robotics & Automation',
       'established', 'Growth', 62000, 'T-550', 'S+60', 'S+60', 24, 5, 73, '', UC3_CSM_OWNER, '',
       '15 of 24 seats Advanced-certified in the last 30 days, plus one Elite-certified sponsor. An ' +
@@ -501,75 +502,95 @@ function scenario3Tickets_() {
   // are uc2's — see scenario3Categories_ above for why they aren't redeclared here. Volume and
   // priority track engagement: the at-risk group files more, higher-priority tickets; the
   // healthy/expansion accounts stay quiet.
+  //
+  // `status` must be a REAL Support Pipeline stage label (New, Waiting on contact, Waiting on us,
+  // Closed) — HubSpotSeed.gs uses this value verbatim as the stage to resolve, and refuses (not
+  // defaults) anything that doesn't match. 'open' is not a stage and was a bug in an earlier draft;
+  // match Michael's working uc2 convention of naming a real stage directly.
   return [
     // Group A
     ['t01', 'uc3', 'bramwell', 'data-import', 'T-90', 'T', 5, 'bramwell.lena,bramwell.derek',
-      'HIGH', 'open', 30, 'Migration-era issues resurfacing — nobody trained on it since.'],
-    ['t02', 'uc3', 'bramwell', 'billing', 'T-90', 'T', 3, 'bramwell.sara', 'MEDIUM', 'open', 20, ''],
+      'HIGH', 'Waiting on us', 30, 'Migration-era issues resurfacing — nobody trained on it since.'],
+    ['t02', 'uc3', 'bramwell', 'billing', 'T-90', 'T', 3, 'bramwell.sara', 'MEDIUM', 'Waiting on us', 20, ''],
     ['t03', 'uc3', 'thackeray', 'certification', 'T-90', 'T', 4, 'thackeray.nadia,thackeray.owen',
-      'MEDIUM', 'open', 24, ''],
-    ['t04', 'uc3', 'thackeray', 'billing', 'T-90', 'T', 2, 'thackeray.carl', 'LOW', 'closed', 14, ''],
-    ['t05', 'uc3', 'delgado', 'integrations', 'T-90', 'T', 3, 'delgado.priya', 'MEDIUM', 'open', 18, ''],
+      'MEDIUM', 'Waiting on us', 24, ''],
+    ['t04', 'uc3', 'thackeray', 'billing', 'T-90', 'T', 2, 'thackeray.carl', 'LOW', 'Closed', 14, ''],
+    ['t05', 'uc3', 'delgado', 'integrations', 'T-90', 'T', 3, 'delgado.priya', 'MEDIUM', 'Waiting on us', 18, ''],
     ['t10', 'uc3', 'fairholt', 'data-import', 'T-90', 'T', 4, 'fairholt.talia,fairholt.dominic',
-      'HIGH', 'open', 28, 'Same migration-gap pattern as bramwell.'],
-    ['t06', 'uc3', 'corvallis', 'reporting', 'T-90', 'T', 1, 'corvallis.wren', 'LOW', 'closed', 8,
+      'HIGH', 'Waiting on us', 28, 'Same migration-gap pattern as bramwell.'],
+    ['t06', 'uc3', 'corvallis', 'reporting', 'T-90', 'T', 1, 'corvallis.wren', 'LOW', 'Closed', 8,
       'Healthy account — quiet on support too, the Story 3 contrast with bramwell.'],
-    ['t07', 'uc3', 'whitlock', 'user-management', 'T-90', 'T', 2, 'whitlock.omar', 'LOW', 'closed', 10, ''],
-    ['t11', 'uc3', 'osgood', 'reporting', 'T-90', 'T', 2, 'osgood.ruth', 'MEDIUM', 'open', 16, ''],
-    ['t12', 'uc3', 'vantree', 'billing', 'T-90', 'T', 3, 'vantree.ana', 'MEDIUM', 'open', 19,
+    ['t07', 'uc3', 'whitlock', 'user-management', 'T-90', 'T', 2, 'whitlock.omar', 'LOW', 'Closed', 10, ''],
+    ['t11', 'uc3', 'osgood', 'reporting', 'T-90', 'T', 2, 'osgood.ruth', 'MEDIUM', 'Waiting on us', 16, ''],
+    ['t12', 'uc3', 'vantree', 'billing', 'T-90', 'T', 3, 'vantree.ana', 'MEDIUM', 'Waiting on us', 19,
       'Friction exists here too, but this account is excluded from Story 1 by renewal timing, not by health.'],
 
     // Group B
-    ['t13', 'uc3', 'calloway', 'integrations', 'T-90', 'T', 1, 'calloway.jonas', 'LOW', 'closed', 6,
+    ['t13', 'uc3', 'calloway', 'integrations', 'T-90', 'T', 1, 'calloway.jonas', 'LOW', 'Closed', 6,
       'Engaged account, minimal friction — consistent with a certified, expansion-ready customer.'],
-    ['t08', 'uc3', 'praxis', 'integrations', 'T-90', 'T', 1, 'praxis.milo', 'LOW', 'closed', 6,
+    ['t08', 'uc3', 'praxis', 'integrations', 'T-90', 'T', 1, 'praxis.milo', 'LOW', 'Closed', 6,
       'Engaged account, minimal friction.'],
-    ['t09', 'uc3', 'fenwick', 'reporting', 'T-90', 'T', 1, 'fenwick.chloe', 'LOW', 'closed', 7, ''],
-    ['t14', 'uc3', 'brightwell', 'reporting', 'T-90', 'T', 1, 'brightwell.aisha', 'LOW', 'closed', 5, ''],
+    ['t09', 'uc3', 'fenwick', 'reporting', 'T-90', 'T', 1, 'fenwick.chloe', 'LOW', 'Closed', 7, ''],
+    ['t14', 'uc3', 'brightwell', 'reporting', 'T-90', 'T', 1, 'brightwell.aisha', 'LOW', 'Closed', 5, ''],
     ['t15', 'uc3', 'nettlecombe', 'user-management', 'T-90', 'T', 2, 'nettlecombe.oscar',
-      'MEDIUM', 'open', 12, '']
+      'MEDIUM', 'Waiting on us', 12, '']
   ];
 }
 
 function scenario3Deals_() {
   // row_id, use_case, account_key, pipeline, stage, amount, close_offset, deal_type, notes
   //
-  // Group A: one Renewals deal per account. Group B: EVERY account now also gets a Renewals deal
-  // (added so the "renews in 100+ days" claim in each account's notes is backed by a real record,
-  // not just prose) — all five sit at Discovery, since 100+ days out is too early for anything
-  // further along. On top of that, an Expansion deal exists ONLY on praxis and brightwell — calloway,
-  // fenwick and nettlecombe deliberately have no Expansion deal, which is the "signal exists, nobody
-  // has acted on it" gap Story 2 is built to surface, at three different depths. calloway and fenwick
-  // therefore carry exactly one deal (Renewals); praxis and brightwell carry two (Renewals + Expansion).
+  // PIPELINE: 'Sales Pipeline' — the default HubSpot pipeline confirmed to exist in the portal
+  // (uc2's own working deal, meridian, uses it: see Scenario2.gs). There is no dedicated
+  // Renewals/Expansion pipeline — HubSpot.gs's hsPipelineSpecs_() only creates 'Onboarding' (uc1's),
+  // and deal seeding REFUSES a pipeline name it can't find rather than falling back to anything. An
+  // earlier draft invented 'Renewals'/'Expansion' pipelines that don't exist anywhere; every deal
+  // below now uses real Sales Pipeline stages, in their real order (earliest to latest):
+  //   Appointment Scheduled < Qualified To Buy < Presentation Scheduled < Decision Maker Bought-In
+  //     < Contract Sent < Closed Won / Closed Lost
+  // Three story-relevant checkpoints are used, preserving that order: Discovery-equivalent =
+  // 'Appointment Scheduled', proposal-equivalent = 'Presentation Scheduled', negotiation-equivalent
+  // = 'Decision Maker Bought-In'. VERIFY against the live portal (Setup -> Show HubSpot Pipelines)
+  // before seeding — default pipelines can be renamed per portal, and this is going on the
+  // documented default plus uc2's proven-working example, not a live read.
+  //
+  // Group A: one deal per account. Group B: EVERY account now also gets a deal on this same pipeline
+  // (added so the "renews in 100+ days" claim in each account's notes is backed by a real record, not
+  // just prose) — all five sit at Appointment Scheduled, since 100+ days out is too early for
+  // anything further along. `deal_type` (renewal/expansion) is the real signal distinguishing them,
+  // written to HubSpot's native `dealtype` property — it does not require a separate pipeline.
+  // calloway, fenwick and nettlecombe deliberately have only ONE deal each (deal_type 'renewal') and
+  // nothing marked 'expansion' — that absence, against a real certification signal, is the Story 2
+  // finding. praxis and brightwell carry two deals each: one 'renewal', one 'expansion'.
   return [
-    ['d01', 'uc3', 'bramwell', 'Renewals', 'Discovery', 58000, 'T+42', 'renewal',
+    ['d01', 'uc3', 'bramwell', 'Sales Pipeline', 'Appointment Scheduled', 58000, 'T+42', 'renewal',
       'Stalled at an early stage — matches the disengagement the training data already shows.'],
-    ['d02', 'uc3', 'thackeray', 'Renewals', 'Proposal Sent', 46000, 'T+55', 'renewal', ''],
-    ['d03', 'uc3', 'delgado', 'Renewals', 'Negotiation', 51000, 'T+20', 'renewal',
-      'Already at Negotiation despite only 48% required training — the deal reads more confident ' +
-      'than the training data supports. Story 1\'s "does the trend support or contradict the deal ' +
-      'stage" drill-down has a real answer here: it contradicts.'],
-    ['d07', 'uc3', 'fairholt', 'Renewals', 'Discovery', 39000, 'T+48', 'renewal', ''],
-    ['d04', 'uc3', 'corvallis', 'Renewals', 'Negotiation', 88000, 'T+30', 'renewal',
+    ['d02', 'uc3', 'thackeray', 'Sales Pipeline', 'Presentation Scheduled', 46000, 'T+55', 'renewal', ''],
+    ['d03', 'uc3', 'delgado', 'Sales Pipeline', 'Decision Maker Bought-In', 51000, 'T+20', 'renewal',
+      'Already at Decision Maker Bought-In despite only 48% required training — the deal reads more ' +
+      'confident than the training data supports. Story 1\'s "does the trend support or contradict ' +
+      'the deal stage" drill-down has a real answer here: it contradicts.'],
+    ['d07', 'uc3', 'fairholt', 'Sales Pipeline', 'Appointment Scheduled', 39000, 'T+48', 'renewal', ''],
+    ['d04', 'uc3', 'corvallis', 'Sales Pipeline', 'Decision Maker Bought-In', 88000, 'T+30', 'renewal',
       'Smooth renewal, consistent with the healthy training picture.'],
-    ['d05', 'uc3', 'whitlock', 'Renewals', 'Proposal Sent', 28000, 'T+58', 'renewal', ''],
-    ['d08', 'uc3', 'osgood', 'Renewals', 'Negotiation', 67000, 'T+15', 'renewal', ''],
-    ['d09', 'uc3', 'vantree', 'Renewals', 'Discovery', 33000, 'T+95', 'renewal',
+    ['d05', 'uc3', 'whitlock', 'Sales Pipeline', 'Presentation Scheduled', 28000, 'T+58', 'renewal', ''],
+    ['d08', 'uc3', 'osgood', 'Sales Pipeline', 'Decision Maker Bought-In', 67000, 'T+15', 'renewal', ''],
+    ['d09', 'uc3', 'vantree', 'Sales Pipeline', 'Appointment Scheduled', 33000, 'T+95', 'renewal',
       'The renewal that puts this account outside the 60-day window despite its training data.'],
 
-    // Group B — Renewals deal on every account, all comfortably outside Group A's 60-day window.
-    ['d11', 'uc3', 'calloway', 'Renewals', 'Discovery', 74000, 'T+150', 'renewal',
-      'The renewal itself is calm and far out — the certification-without-a-deal gap is the real story here.'],
-    ['d12', 'uc3', 'praxis', 'Renewals', 'Discovery', 62000, 'T+120', 'renewal', ''],
-    ['d13', 'uc3', 'fenwick', 'Renewals', 'Discovery', 39000, 'T+135', 'renewal', ''],
-    ['d14', 'uc3', 'brightwell', 'Renewals', 'Discovery', 44000, 'T+130', 'renewal', ''],
-    ['d15', 'uc3', 'nettlecombe', 'Renewals', 'Discovery', 21000, 'T+110', 'renewal', ''],
+    // Group B — a renewal-type deal on every account, all comfortably outside Group A's 60-day window.
+    ['d11', 'uc3', 'calloway', 'Sales Pipeline', 'Appointment Scheduled', 74000, 'T+150', 'renewal',
+      'The renewal itself is calm and far out — the certification-without-an-expansion-deal gap is the real story here.'],
+    ['d12', 'uc3', 'praxis', 'Sales Pipeline', 'Appointment Scheduled', 62000, 'T+120', 'renewal', ''],
+    ['d13', 'uc3', 'fenwick', 'Sales Pipeline', 'Appointment Scheduled', 39000, 'T+135', 'renewal', ''],
+    ['d14', 'uc3', 'brightwell', 'Sales Pipeline', 'Appointment Scheduled', 44000, 'T+130', 'renewal', ''],
+    ['d15', 'uc3', 'nettlecombe', 'Sales Pipeline', 'Appointment Scheduled', 21000, 'T+110', 'renewal', ''],
 
-    // Group B — Expansion deal ONLY on praxis and brightwell. calloway, fenwick, nettlecombe have
-    // none — that absence, against a real certification signal, IS the finding.
-    ['d06', 'uc3', 'praxis', 'Expansion', 'Discovery', 18000, 'T+60', 'expansion',
+    // Group B — an expansion-type deal ONLY on praxis and brightwell. calloway, fenwick, nettlecombe
+    // have none — that absence, against a real certification signal, IS the finding.
+    ['d06', 'uc3', 'praxis', 'Sales Pipeline', 'Appointment Scheduled', 18000, 'T+60', 'expansion',
       'Opened on the back of the certification wave.'],
-    ['d10', 'uc3', 'brightwell', 'Expansion', 'Proposal Sent', 15000, 'T+50', 'expansion',
+    ['d10', 'uc3', 'brightwell', 'Sales Pipeline', 'Presentation Scheduled', 15000, 'T+50', 'expansion',
       'Further along than praxis\'s — the conversation started before or alongside the certification wave.']
   ];
 }
